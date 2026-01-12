@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mindful Media Dashboard</title>
+    <title>Media Dashboard</title>
     <style>
         :root {
+            /* Light Theme (Default) */
             --primary: #2c3e50;
             --secondary: #3498db;
             --accent: #e74c3c;
@@ -16,6 +17,21 @@
             --text-light: #7f8c8d;
             --border: #bdc3c7;
             --success: #27ae60;
+            --modal-overlay: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="dark"] {
+            /* Dark Theme */
+            --primary: #ecf0f1;
+            --secondary: #3498db;
+            --accent: #e74c3c;
+            --background: #1a1a1a;
+            --card-bg: #2c3e50;
+            --text: #ecf0f1;
+            --text-light: #bdc3c7;
+            --border: #4a6278;
+            --success: #2ecc71;
+            --modal-overlay: rgba(0, 0, 0, 0.7);
         }
 
         * {
@@ -38,11 +54,21 @@
         }
 
         header {
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             margin-bottom: 40px;
             padding-bottom: 20px;
             border-bottom: 3px solid var(--secondary);
             position: relative;
+        }
+
+        .header-buttons {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
         }
 
         h1 {
@@ -57,23 +83,70 @@
             font-style: italic;
         }
 
-        .settings-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
+        /* Icon button base style */
+        .icon-btn {
+            position: relative;
             background: transparent;
             border: 1px solid var(--border);
             color: var(--text-light);
-            padding: 8px 12px;
+            width: 40px;
+            height: 40px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.85em;
+            font-size: 1.1em;
             transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .settings-btn:hover {
+        .icon-btn:hover {
             background: var(--border);
             color: var(--text);
+        }
+
+        /* CSS Tooltip */
+        .icon-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 8px;
+            padding: 6px 10px;
+            background: var(--primary);
+            color: var(--background);
+            font-size: 0.75em;
+            border-radius: 4px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s, visibility 0.2s;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* Tooltip arrow */
+        .icon-btn::before {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 3px;
+            border: 5px solid transparent;
+            border-bottom-color: var(--primary);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s, visibility 0.2s;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .icon-btn:hover::after,
+        .icon-btn:hover::before {
+            opacity: 1;
+            visibility: visible;
         }
 
         .section {
@@ -201,7 +274,7 @@
         }
 
         .modal-content {
-            background: white;
+            background: var(--card-bg);
             padding: 30px;
             border-radius: 12px;
             max-width: 500px;
@@ -237,6 +310,8 @@
             border: 2px solid var(--border);
             border-radius: 6px;
             font-size: 1em;
+            background: var(--background);
+            color: var(--text);
         }
 
         .form-group input:focus,
@@ -299,7 +374,7 @@
         }
 
         .content-card {
-            background: white;
+            background: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 8px;
             overflow: hidden;
@@ -417,14 +492,30 @@
             color: #721c24;
             font-weight: 600;
         }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            color: var(--text-light);
+            font-size: 0.8em;
+            border-top: 1px solid var(--border);
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
         <header>
-            <button class="settings-btn" onclick="openApiKeyModal()">⚙️ Settings</button>
-            <h1>📚 Mindful Media Dashboard</h1>
+            <div class="header-buttons">
+                <button class="icon-btn" onclick="toggleTheme()" id="theme-toggle-btn" data-tooltip="Dark Mode">
+                    <span id="theme-icon">🌙</span>
+                </button>
+                <button class="icon-btn" onclick="openApiKeyModal()" data-tooltip="Settings">
+                    ⚙️
+                </button>
+            </div>
+            <h1>📚 Media Dashboard</h1>
             <p class="tagline">Intentional content, curated by you</p>
         </header>
 
@@ -464,6 +555,10 @@
                 <div class="loading">Loading articles...</div>
             </div>
         </section>
+
+        <footer>
+            version: black forest cake
+        </footer>
     </div>
 
     <!-- Add/Edit Book Modal -->
@@ -604,6 +699,43 @@
             maxVideos: 15,
             maxArticles: 15
         };
+
+        // ============================================
+        // THEME MANAGEMENT
+        // ============================================
+
+        const THEME_STORAGE_KEY = 'media_dashboard_theme';
+
+        function getSavedTheme() {
+            return localStorage.getItem(THEME_STORAGE_KEY) || 'light';
+        }
+
+        function applyTheme(theme) {
+            const root = document.documentElement;
+            const toggleBtn = document.getElementById('theme-toggle-btn');
+            const toggleIcon = document.getElementById('theme-icon');
+
+            if (theme === 'dark') {
+                root.setAttribute('data-theme', 'dark');
+                toggleIcon.textContent = '☀️';
+                toggleBtn.setAttribute('data-tooltip', 'Light Mode');
+            } else {
+                root.removeAttribute('data-theme');
+                toggleIcon.textContent = '🌙';
+                toggleBtn.setAttribute('data-tooltip', 'Dark Mode');
+            }
+
+            localStorage.setItem(THEME_STORAGE_KEY, theme);
+        }
+
+        function toggleTheme() {
+            const currentTheme = getSavedTheme();
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            applyTheme(newTheme);
+        }
+
+        // Initialize Theme
+        applyTheme(getSavedTheme());
 
         // ============================================
         // API KEY MANAGEMENT (localStorage)
