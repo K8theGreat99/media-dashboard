@@ -1,0 +1,6 @@
+# Ignore sensitive and irrelevant files
+API keys.md
+*.csv
+*.py
+*.md
+!index.html
