@@ -501,17 +501,30 @@
     <!-- API Key Setup Modal -->
     <div class="modal" id="apiKeyModal">
         <div class="modal-content">
-            <h3>🔑 YouTube API Key Setup</h3>
-            <p>Enter your YouTube Data API v3 key to enable the video feed. This will be stored locally in your browser
-                and is never sent anywhere except to YouTube's API.</p>
+            <h3>🔑 API Key Setup</h3>
+
             <form id="apiKeyForm">
                 <div class="form-group">
-                    <label for="apiKey">API Key</label>
-                    <input type="text" id="apiKey" required placeholder="AIzaSy...">
+                    <label for="apiKey">YouTube Data API Key</label>
+                    <input type="text" id="apiKey" placeholder="AIzaSy...">
+                    <p style="font-size: 0.8em; color: var(--text-light); margin-top: 5px;">
+                        Required for YouTube videos. stored locally.
+                    </p>
                 </div>
+
+                <div class="form-group"
+                    style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px;">
+                    <label for="rssApiKey">RSS2JSON API Key (Optional)</label>
+                    <input type="text" id="rssApiKey" placeholder="Enter key if feeds fail...">
+                    <p style="font-size: 0.8em; color: var(--text-light); margin-top: 5px;">
+                        Optional. Get a free key from <a href="https://rss2json.com/apikey" target="_blank"
+                            style="color: var(--secondary);">rss2json.com</a> if you hit rate limits (429 errors).
+                    </p>
+                </div>
+
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" onclick="closeApiKeyModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save API Key</button>
+                    <button type="submit" class="btn btn-primary">Save Keys</button>
                 </div>
             </form>
         </div>
@@ -597,13 +610,22 @@
         // ============================================
 
         const API_KEY_STORAGE = 'youtube_api_key';
+        const RSS_API_KEY_STORAGE = 'rss_api_key';
 
         function getApiKey() {
             return localStorage.getItem(API_KEY_STORAGE);
         }
 
+        function getRssApiKey() {
+            return localStorage.getItem(RSS_API_KEY_STORAGE);
+        }
+
         function setApiKey(key) {
             localStorage.setItem(API_KEY_STORAGE, key);
+        }
+
+        function setRssApiKey(key) {
+            localStorage.setItem(RSS_API_KEY_STORAGE, key);
         }
 
         function updateApiKeyStatus() {
@@ -621,7 +643,9 @@
 
         function openApiKeyModal() {
             const currentKey = getApiKey();
+            const currentRssKey = getRssApiKey();
             document.getElementById('apiKey').value = currentKey || '';
+            document.getElementById('rssApiKey').value = currentRssKey || '';
             document.getElementById('apiKeyModal').classList.add('active');
         }
 
@@ -632,14 +656,21 @@
         document.getElementById('apiKeyForm').addEventListener('submit', function (e) {
             e.preventDefault();
             const key = document.getElementById('apiKey').value.trim();
+            const rssKey = document.getElementById('rssApiKey').value.trim();
 
             if (key) {
                 setApiKey(key);
                 updateApiKeyStatus();
-                closeApiKeyModal();
-                // Reload YouTube content with new key
-                fetchYouTubeVideos();
             }
+
+            if (rssKey) {
+                setRssApiKey(rssKey);
+            }
+
+            closeApiKeyModal();
+            // Reload content with new keys
+            if (key) fetchYouTubeVideos();
+            if (rssKey) fetchSubstackArticles(true);
         });
 
         // Close API modal when clicking outside
@@ -657,7 +688,10 @@
             videos: 'youtube_cache_videos',
             timestamp: 'youtube_cache_timestamp',
             refreshCount: 'youtube_refresh_count',
-            refreshDate: 'youtube_refresh_date'
+            refreshDate: 'youtube_refresh_date',
+            // Substack Cache
+            articles: 'substack_cache_articles',
+            articlesTimestamp: 'substack_cache_timestamp'
         };
 
         const CACHE_MAX_AGE_HOURS = 24;
@@ -750,6 +784,28 @@
             } else {
                 refreshCounterEl.classList.remove('warning');
             }
+        }
+
+        // ============================================
+        // SUBSTACK CACHING SYSTEM
+        // ============================================
+
+        function saveSubstackCache(articles) {
+            localStorage.setItem(CACHE_KEYS.articles, JSON.stringify(articles));
+            localStorage.setItem(CACHE_KEYS.articlesTimestamp, Date.now().toString());
+        }
+
+        function loadSubstackCache() {
+            const cached = localStorage.getItem(CACHE_KEYS.articles);
+            return cached ? JSON.parse(cached) : null;
+        }
+
+        function isSubstackCacheValid() {
+            const timestamp = localStorage.getItem(CACHE_KEYS.articlesTimestamp);
+            if (!timestamp) return false;
+            // Cache valid for 4 hours
+            const ageHours = (Date.now() - parseInt(timestamp, 10)) / (1000 * 60 * 60);
+            return ageHours < 4;
         }
 
         // ============================================
@@ -983,15 +1039,54 @@
         // SUBSTACK INTEGRATION
         // ============================================
 
-        async function fetchSubstackArticles() {
+        function renderSubstackArticles(articles) {
+            const content = document.getElementById('substack-content');
+            if (!articles || articles.length === 0) {
+                content.innerHTML = '<div class="empty-state"><p>No recent articles found.</p></div>';
+                return;
+            }
+
+            content.innerHTML = `
+                <div class="content-grid">
+                    ${articles.map(article => `
+                        <div class="content-card">
+                            <a href="${article.link}" target="_blank">
+                                ${article.thumbnail ? `<img src="${article.thumbnail}" alt="${article.title}">` : ''}
+                                <div class="content-card-body">
+                                    <h3>${article.title}</h3>
+                                    <div class="content-meta">
+                                        ${article.author} • ${formatDate(article.pubDate)}
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function fetchSubstackArticles(forceRefresh = false) {
             const content = document.getElementById('substack-content');
             const refreshBtn = document.getElementById('substack-refresh');
+
+            // Check cache first
+            if (!forceRefresh && isSubstackCacheValid()) {
+                const cachedArticles = loadSubstackCache();
+                if (cachedArticles) {
+                    renderSubstackArticles(cachedArticles);
+                    console.log('Loaded Substack articles from cache');
+                    return;
+                }
+            }
 
             refreshBtn.disabled = true;
             content.innerHTML = '<div class="loading">Loading articles... This may take a minute.</div>';
 
             try {
                 const allArticles = [];
+                const rssApiKey = getRssApiKey();
+                // Add API key if present, otherwise no param (free tier)
+                const apiKeyParam = rssApiKey ? `&api_key=${rssApiKey}` : '';
 
                 // Fetch feeds one at a time with delays to avoid rate limiting
                 for (let i = 0; i < CONFIG.substackFeeds.length; i++) {
@@ -1003,14 +1098,18 @@
                     }
 
                     try {
-                        // Use RSS2JSON service to parse RSS feeds (avoids CORS issues)
+                        // Use RSS2JSON service
                         const rssUrl = `${feedUrl}/feed`;
-                        const response = await fetch(
-                            `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=2`
-                        );
+                        // Construct URL with API key if available
+                        const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=2${apiKeyParam}`;
+
+                        const response = await fetch(apiUrl);
 
                         if (!response.ok) {
                             console.warn(`RSS fetch error for ${feedUrl}: ${response.status}`);
+                            if (response.status === 429) {
+                                console.warn('Rate limit hit! Consider adding an RSS2JSON API key in Settings.');
+                            }
                             continue;
                         }
 
@@ -1031,41 +1130,46 @@
                 const topArticles = allArticles.slice(0, CONFIG.maxArticles);
 
                 if (topArticles.length === 0) {
-                    content.innerHTML = '<div class="empty-state"><p>No recent articles found.</p></div>';
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <p>No recent articles found.</p>
+                            ${!rssApiKey ? '<p style="font-size:0.9em;color:var(--text-light);margin-top:10px;">(If feeds are failing, you might need an RSS2JSON API key. Check Settings ⚙️)</p>' : ''}
+                        </div>
+                    `;
+                } else {
+                    // Save to cache
+                    saveSubstackCache(topArticles);
+                    // Render
+                    renderSubstackArticles(topArticles);
+                }
+
+            } catch (error) {
+                console.error('Substack fetch error:', error);
+
+                // Fallback to cache if available
+                const cached = loadSubstackCache();
+                if (cached) {
+                    renderSubstackArticles(cached);
+                    content.innerHTML += `
+                        <div class="error" style="margin-top: 15px;">
+                            <strong>Note:</strong> Showing cached data. Refresh failed: ${error.message}
+                        </div>
+                    `;
                 } else {
                     content.innerHTML = `
-                        <div class="content-grid">
-                            ${topArticles.map(article => `
-                                <div class="content-card">
-                                    <a href="${article.link}" target="_blank">
-                                        ${article.thumbnail ? `<img src="${article.thumbnail}" alt="${article.title}">` : ''}
-                                        <div class="content-card-body">
-                                            <h3>${article.title}</h3>
-                                            <div class="content-meta">
-                                                ${article.author} • ${formatDate(article.pubDate)}
-                                            </div>
-                                        </div>
-                                    </a>
-                                </div>
-                            `).join('')}
+                        <div class="error">
+                            <strong>Error loading Substack articles:</strong><br>
+                            ${error.message}
                         </div>
                     `;
                 }
-            } catch (error) {
-                console.error('Substack fetch error:', error);
-                content.innerHTML = `
-                    <div class="error">
-                        <strong>Error loading Substack articles:</strong><br>
-                        ${error.message}
-                    </div>
-                `;
             } finally {
                 refreshBtn.disabled = false;
             }
         }
 
         function refreshSubstack() {
-            fetchSubstackArticles();
+            fetchSubstackArticles(true);
         }
 
         // ============================================
