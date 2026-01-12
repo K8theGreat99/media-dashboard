@@ -657,7 +657,10 @@
             videos: 'youtube_cache_videos',
             timestamp: 'youtube_cache_timestamp',
             refreshCount: 'youtube_refresh_count',
-            refreshDate: 'youtube_refresh_date'
+            refreshDate: 'youtube_refresh_date',
+            // Substack Cache
+            articles: 'substack_cache_articles',
+            articlesTimestamp: 'substack_cache_timestamp'
         };
 
         const CACHE_MAX_AGE_HOURS = 24;
@@ -750,6 +753,28 @@
             } else {
                 refreshCounterEl.classList.remove('warning');
             }
+        }
+
+        // ============================================
+        // SUBSTACK CACHING SYSTEM
+        // ============================================
+
+        function saveSubstackCache(articles) {
+            localStorage.setItem(CACHE_KEYS.articles, JSON.stringify(articles));
+            localStorage.setItem(CACHE_KEYS.articlesTimestamp, Date.now().toString());
+        }
+
+        function loadSubstackCache() {
+            const cached = localStorage.getItem(CACHE_KEYS.articles);
+            return cached ? JSON.parse(cached) : null;
+        }
+
+        function isSubstackCacheValid() {
+            const timestamp = localStorage.getItem(CACHE_KEYS.articlesTimestamp);
+            if (!timestamp) return false;
+            // Cache valid for 4 hours
+            const ageHours = (Date.now() - parseInt(timestamp, 10)) / (1000 * 60 * 60);
+            return ageHours < 4;
         }
 
         // ============================================
@@ -983,89 +1008,159 @@
         // SUBSTACK INTEGRATION
         // ============================================
 
-        async function fetchSubstackArticles() {
+        function renderSubstackArticles(articles) {
+            const content = document.getElementById('substack-content');
+            if (!articles || articles.length === 0) {
+                content.innerHTML = '<div class="empty-state"><p>No recent articles found.</p></div>';
+                return;
+            }
+
+            content.innerHTML = `
+                <div class="content-grid">
+                    ${articles.map(article => `
+                        <div class="content-card">
+                            <a href="${article.link}" target="_blank">
+                                ${article.thumbnail ? `<img src="${article.thumbnail}" alt="${article.title}">` : ''}
+                                <div class="content-card-body">
+                                    <h3>${article.title}</h3>
+                                    <div class="content-meta">
+                                        ${article.author} • ${formatDate(article.pubDate)}
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function fetchSubstackArticles(forceRefresh = false) {
             const content = document.getElementById('substack-content');
             const refreshBtn = document.getElementById('substack-refresh');
+
+            // Check cache first
+            if (!forceRefresh && isSubstackCacheValid()) {
+                const cachedArticles = loadSubstackCache();
+                if (cachedArticles) {
+                    renderSubstackArticles(cachedArticles);
+                    console.log('Loaded Substack articles from cache');
+                    return;
+                }
+            }
 
             refreshBtn.disabled = true;
             content.innerHTML = '<div class="loading">Loading articles... This may take a minute.</div>';
 
             try {
                 const allArticles = [];
+                const parser = new DOMParser();
 
-                // Fetch feeds one at a time with delays to avoid rate limiting
+                // Fetch feeds one at a time with delays
                 for (let i = 0; i < CONFIG.substackFeeds.length; i++) {
                     const feedUrl = CONFIG.substackFeeds[i];
 
-                    // Add a delay between requests (except for the first one)
-                    if (i > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
-                    }
+                    // Small delay to be polite to the proxy
+                    if (i > 0) await new Promise(r => setTimeout(r, 200));
 
                     try {
-                        // Use RSS2JSON service to parse RSS feeds (avoids CORS issues)
-                        const rssUrl = `${feedUrl}/feed`;
-                        const response = await fetch(
-                            `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=2`
-                        );
+                        // Use allorigins.win as a CORS proxy
+                        // It returns JSON with the actual content in a string
+                        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(feedUrl + '/feed')}`;
+                        const response = await fetch(proxyUrl);
 
-                        if (!response.ok) {
-                            console.warn(`RSS fetch error for ${feedUrl}: ${response.status}`);
-                            continue;
-                        }
+                        if (!response.ok) continue;
 
                         const data = await response.json();
 
-                        if (data.status === 'ok' && data.items) {
-                            allArticles.push(...data.items);
+                        // Parse the XML string
+                        if (data.contents) {
+                            const xmlDoc = parser.parseFromString(data.contents, "text/xml");
+                            const items = xmlDoc.querySelectorAll("item");
+
+                            items.forEach(item => {
+                                const title = item.querySelector("title")?.textContent || "Untitled";
+                                const link = item.querySelector("link")?.textContent || "#";
+                                const pubDate = item.querySelector("pubDate")?.textContent || "";
+
+                                // Try to find author in dc:creator or similar
+                                let author = "Unknown Author";
+                                const creator = item.getElementsByTagName("dc:creator")[0];
+                                if (creator) author = creator.textContent;
+                                else {
+                                    // Fallback to feed title if no author on item
+                                    const feedTitle = xmlDoc.querySelector("channel > title")?.textContent;
+                                    if (feedTitle) author = feedTitle;
+                                }
+
+                                // Try to find thumbnail
+                                let thumbnail = null;
+                                const mediaContent = item.getElementsByTagName("media:content")[0];
+                                const enclosure = item.querySelector("enclosure");
+
+                                if (mediaContent) {
+                                    thumbnail = mediaContent.getAttribute("url");
+                                } else if (enclosure && enclosure.getAttribute("type")?.startsWith("image")) {
+                                    thumbnail = enclosure.getAttribute("url");
+                                } else {
+                                    // Try extracting image from description
+                                    const description = item.querySelector("description")?.textContent || "";
+                                    const imgMatch = description.match(/<img[^>]+src="([^">]+)"/);
+                                    if (imgMatch) thumbnail = imgMatch[1];
+                                }
+
+                                allArticles.push({
+                                    title,
+                                    link,
+                                    pubDate,
+                                    author,
+                                    thumbnail
+                                });
+                            });
                         }
                     } catch (error) {
                         console.warn(`Error fetching ${feedUrl}:`, error);
                     }
                 }
 
-                // Sort all articles by date
+                // Sort by date (newest first)
                 allArticles.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
-                // Take top N articles
+                // Take top N
                 const topArticles = allArticles.slice(0, CONFIG.maxArticles);
 
-                if (topArticles.length === 0) {
-                    content.innerHTML = '<div class="empty-state"><p>No recent articles found.</p></div>';
+                // Save to cache
+                saveSubstackCache(topArticles);
+
+                // Render
+                renderSubstackArticles(topArticles);
+
+            } catch (error) {
+                console.error('Substack fetch error:', error);
+
+                // Fallback to cache if available
+                const cached = loadSubstackCache();
+                if (cached) {
+                    renderSubstackArticles(cached);
+                    content.innerHTML += `
+                        <div class="error" style="margin-top: 15px;">
+                            <strong>Note:</strong> Showing cached data. Refresh failed: ${error.message}
+                        </div>
+                    `;
                 } else {
                     content.innerHTML = `
-                        <div class="content-grid">
-                            ${topArticles.map(article => `
-                                <div class="content-card">
-                                    <a href="${article.link}" target="_blank">
-                                        ${article.thumbnail ? `<img src="${article.thumbnail}" alt="${article.title}">` : ''}
-                                        <div class="content-card-body">
-                                            <h3>${article.title}</h3>
-                                            <div class="content-meta">
-                                                ${article.author} • ${formatDate(article.pubDate)}
-                                            </div>
-                                        </div>
-                                    </a>
-                                </div>
-                            `).join('')}
+                        <div class="error">
+                            <strong>Error loading Substack articles:</strong><br>
+                            ${error.message}
                         </div>
                     `;
                 }
-            } catch (error) {
-                console.error('Substack fetch error:', error);
-                content.innerHTML = `
-                    <div class="error">
-                        <strong>Error loading Substack articles:</strong><br>
-                        ${error.message}
-                    </div>
-                `;
             } finally {
                 refreshBtn.disabled = false;
             }
         }
 
         function refreshSubstack() {
-            fetchSubstackArticles();
+            fetchSubstackArticles(true);
         }
 
         // ============================================
