@@ -501,17 +501,30 @@
     <!-- API Key Setup Modal -->
     <div class="modal" id="apiKeyModal">
         <div class="modal-content">
-            <h3>🔑 YouTube API Key Setup</h3>
-            <p>Enter your YouTube Data API v3 key to enable the video feed. This will be stored locally in your browser
-                and is never sent anywhere except to YouTube's API.</p>
+            <h3>🔑 API Key Setup</h3>
+
             <form id="apiKeyForm">
                 <div class="form-group">
-                    <label for="apiKey">API Key</label>
-                    <input type="text" id="apiKey" required placeholder="AIzaSy...">
+                    <label for="apiKey">YouTube Data API Key</label>
+                    <input type="text" id="apiKey" placeholder="AIzaSy...">
+                    <p style="font-size: 0.8em; color: var(--text-light); margin-top: 5px;">
+                        Required for YouTube videos. stored locally.
+                    </p>
                 </div>
+
+                <div class="form-group"
+                    style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px;">
+                    <label for="rssApiKey">RSS2JSON API Key (Optional)</label>
+                    <input type="text" id="rssApiKey" placeholder="Enter key if feeds fail...">
+                    <p style="font-size: 0.8em; color: var(--text-light); margin-top: 5px;">
+                        Optional. Get a free key from <a href="https://rss2json.com/apikey" target="_blank"
+                            style="color: var(--secondary);">rss2json.com</a> if you hit rate limits (429 errors).
+                    </p>
+                </div>
+
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" onclick="closeApiKeyModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save API Key</button>
+                    <button type="submit" class="btn btn-primary">Save Keys</button>
                 </div>
             </form>
         </div>
@@ -597,13 +610,22 @@
         // ============================================
 
         const API_KEY_STORAGE = 'youtube_api_key';
+        const RSS_API_KEY_STORAGE = 'rss_api_key';
 
         function getApiKey() {
             return localStorage.getItem(API_KEY_STORAGE);
         }
 
+        function getRssApiKey() {
+            return localStorage.getItem(RSS_API_KEY_STORAGE);
+        }
+
         function setApiKey(key) {
             localStorage.setItem(API_KEY_STORAGE, key);
+        }
+
+        function setRssApiKey(key) {
+            localStorage.setItem(RSS_API_KEY_STORAGE, key);
         }
 
         function updateApiKeyStatus() {
@@ -621,7 +643,9 @@
 
         function openApiKeyModal() {
             const currentKey = getApiKey();
+            const currentRssKey = getRssApiKey();
             document.getElementById('apiKey').value = currentKey || '';
+            document.getElementById('rssApiKey').value = currentRssKey || '';
             document.getElementById('apiKeyModal').classList.add('active');
         }
 
@@ -632,14 +656,21 @@
         document.getElementById('apiKeyForm').addEventListener('submit', function (e) {
             e.preventDefault();
             const key = document.getElementById('apiKey').value.trim();
+            const rssKey = document.getElementById('rssApiKey').value.trim();
 
             if (key) {
                 setApiKey(key);
                 updateApiKeyStatus();
-                closeApiKeyModal();
-                // Reload YouTube content with new key
-                fetchYouTubeVideos();
             }
+
+            if (rssKey) {
+                setRssApiKey(rssKey);
+            }
+
+            closeApiKeyModal();
+            // Reload content with new keys
+            if (key) fetchYouTubeVideos();
+            if (rssKey) fetchSubstackArticles(true);
         });
 
         // Close API modal when clicking outside
@@ -1053,86 +1084,64 @@
 
             try {
                 const allArticles = [];
-                const parser = new DOMParser();
+                const rssApiKey = getRssApiKey();
+                // Add API key if present, otherwise no param (free tier)
+                const apiKeyParam = rssApiKey ? `&api_key=${rssApiKey}` : '';
 
-                // Fetch feeds one at a time with delays
+                // Fetch feeds one at a time with delays to avoid rate limiting
                 for (let i = 0; i < CONFIG.substackFeeds.length; i++) {
                     const feedUrl = CONFIG.substackFeeds[i];
 
-                    // Small delay to be polite to the proxy
-                    if (i > 0) await new Promise(r => setTimeout(r, 200));
+                    // Add a delay between requests (except for the first one)
+                    if (i > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+                    }
 
                     try {
-                        // Use allorigins.win as a CORS proxy
-                        // It returns JSON with the actual content in a string
-                        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(feedUrl + '/feed')}`;
-                        const response = await fetch(proxyUrl);
+                        // Use RSS2JSON service
+                        const rssUrl = `${feedUrl}/feed`;
+                        // Construct URL with API key if available
+                        const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=2${apiKeyParam}`;
 
-                        if (!response.ok) continue;
+                        const response = await fetch(apiUrl);
+
+                        if (!response.ok) {
+                            console.warn(`RSS fetch error for ${feedUrl}: ${response.status}`);
+                            if (response.status === 429) {
+                                console.warn('Rate limit hit! Consider adding an RSS2JSON API key in Settings.');
+                            }
+                            continue;
+                        }
 
                         const data = await response.json();
 
-                        // Parse the XML string
-                        if (data.contents) {
-                            const xmlDoc = parser.parseFromString(data.contents, "text/xml");
-                            const items = xmlDoc.querySelectorAll("item");
-
-                            items.forEach(item => {
-                                const title = item.querySelector("title")?.textContent || "Untitled";
-                                const link = item.querySelector("link")?.textContent || "#";
-                                const pubDate = item.querySelector("pubDate")?.textContent || "";
-
-                                // Try to find author in dc:creator or similar
-                                let author = "Unknown Author";
-                                const creator = item.getElementsByTagName("dc:creator")[0];
-                                if (creator) author = creator.textContent;
-                                else {
-                                    // Fallback to feed title if no author on item
-                                    const feedTitle = xmlDoc.querySelector("channel > title")?.textContent;
-                                    if (feedTitle) author = feedTitle;
-                                }
-
-                                // Try to find thumbnail
-                                let thumbnail = null;
-                                const mediaContent = item.getElementsByTagName("media:content")[0];
-                                const enclosure = item.querySelector("enclosure");
-
-                                if (mediaContent) {
-                                    thumbnail = mediaContent.getAttribute("url");
-                                } else if (enclosure && enclosure.getAttribute("type")?.startsWith("image")) {
-                                    thumbnail = enclosure.getAttribute("url");
-                                } else {
-                                    // Try extracting image from description
-                                    const description = item.querySelector("description")?.textContent || "";
-                                    const imgMatch = description.match(/<img[^>]+src="([^">]+)"/);
-                                    if (imgMatch) thumbnail = imgMatch[1];
-                                }
-
-                                allArticles.push({
-                                    title,
-                                    link,
-                                    pubDate,
-                                    author,
-                                    thumbnail
-                                });
-                            });
+                        if (data.status === 'ok' && data.items) {
+                            allArticles.push(...data.items);
                         }
                     } catch (error) {
                         console.warn(`Error fetching ${feedUrl}:`, error);
                     }
                 }
 
-                // Sort by date (newest first)
+                // Sort all articles by date
                 allArticles.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
-                // Take top N
+                // Take top N articles
                 const topArticles = allArticles.slice(0, CONFIG.maxArticles);
 
-                // Save to cache
-                saveSubstackCache(topArticles);
-
-                // Render
-                renderSubstackArticles(topArticles);
+                if (topArticles.length === 0) {
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <p>No recent articles found.</p>
+                            ${!rssApiKey ? '<p style="font-size:0.9em;color:var(--text-light);margin-top:10px;">(If feeds are failing, you might need an RSS2JSON API key. Check Settings ⚙️)</p>' : ''}
+                        </div>
+                    `;
+                } else {
+                    // Save to cache
+                    saveSubstackCache(topArticles);
+                    // Render
+                    renderSubstackArticles(topArticles);
+                }
 
             } catch (error) {
                 console.error('Substack fetch error:', error);
