@@ -1403,18 +1403,6 @@
         }
 
         function refreshYouTube() {
-            const refreshCount = getRefreshCount();
-
-            if (refreshCount >= MAX_DAILY_REFRESHES) {
-                const confirmed = confirm(
-                    `⚠️ You've already refreshed ${refreshCount} times today.\n\n` +
-                    `YouTube API quota resets at 3 AM Eastern (midnight Pacific).\n\n` +
-                    `Refreshing now may use up your daily quota.\n\n` +
-                    `Continue anyway?`
-                );
-                if (!confirmed) return;
-            }
-
             fetchYouTubeVideos(true);
         }
 
