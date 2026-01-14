@@ -635,7 +635,7 @@
         </section>
 
         <footer>
-            version: compost 4
+            version: compost 5
         </footer>
     </div>
 
@@ -1307,7 +1307,7 @@
                 for (const playlistId of CONFIG.youtubePlaylistIds) {
                     try {
                         const response = await fetch(
-                            `https://www.googleapis.com/youtube/v3/playlistItems?key=${apiKey}&playlistId=${playlistId}&part=snippet&maxResults=5`
+                            `https://www.googleapis.com/youtube/v3/playlistItems?key=${apiKey}&playlistId=${playlistId}&part=snippet&maxResults=10`
                         );
 
                         if (!response.ok) {
