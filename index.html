@@ -635,7 +635,7 @@
         </section>
 
         <footer>
-            version: compost 5
+            version: bento ver1
         </footer>
     </div>
 
@@ -915,7 +915,6 @@
         };
 
         const CACHE_MAX_AGE_HOURS = 24;
-        const MAX_DAILY_REFRESHES = 3;
 
         // Get current date in Pacific timezone for quota reset alignment
         // YouTube quota resets at midnight Pacific (3 AM Eastern)
@@ -1385,11 +1384,11 @@
                 const cachedVideos = loadFromCache();
                 if (cachedVideos && cachedVideos.length > 0) {
                     renderVideos(cachedVideos);
-                    content.innerHTML += `
-                        <div class="error" style="margin-top: 15px;">
-                            <strong>Note:</strong> Showing cached data. Refresh failed: ${error.message}
+                    content.insertAdjacentHTML('afterbegin', `
+                        <div class="error" style="margin-bottom: 15px;">
+                            <strong>Refresh failed:</strong> ${error.message} — showing cached data.
                         </div>
-                    `;
+                    `);
                 } else {
                     content.innerHTML = `
                         <div class="error">
