@@ -579,6 +579,165 @@
             font-size: 0.8em;
             border-top: 1px solid var(--border);
         }
+
+        /* Config Sources Modal */
+        #configModal .modal-content {
+            max-width: 680px;
+            max-height: 88vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .config-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+
+        .config-tab-btn {
+            padding: 9px 18px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: var(--text-light);
+            font-size: 0.95em;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .config-tab-btn.active {
+            color: var(--secondary);
+            border-bottom-color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .config-panel {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .config-panel.active {
+            display: flex;
+        }
+
+        .source-help {
+            font-size: 0.82em;
+            color: var(--text-light);
+            margin-bottom: 10px;
+            line-height: 1.5;
+            flex-shrink: 0;
+        }
+
+        .source-help code {
+            background: var(--border);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 1em;
+        }
+
+        .source-list {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            min-height: 80px;
+        }
+
+        .source-list-empty {
+            padding: 24px;
+            text-align: center;
+            color: var(--text-light);
+            font-style: italic;
+            font-size: 0.9em;
+        }
+
+        .source-item {
+            display: flex;
+            gap: 7px;
+            align-items: center;
+            padding: 7px 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .source-item:last-child {
+            border-bottom: none;
+        }
+
+        .source-item input {
+            flex: 1;
+            min-width: 0;
+            padding: 6px 9px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--background);
+            color: var(--text);
+            font-size: 0.87em;
+        }
+
+        .source-item input.source-label {
+            flex: 0 0 140px;
+        }
+
+        .source-item input:focus {
+            outline: none;
+            border-color: var(--secondary);
+        }
+
+        .source-remove-btn {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            background: none;
+            color: var(--text-light);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+
+        .source-remove-btn:hover {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .add-source-btn {
+            align-self: flex-start;
+            background: none;
+            color: var(--secondary);
+            border: 1px dashed var(--secondary);
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.88em;
+            margin-bottom: 4px;
+            flex-shrink: 0;
+            transition: background 0.15s;
+        }
+
+        .add-source-btn:hover {
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .config-footer-note {
+            font-size: 0.8em;
+            color: var(--text-light);
+            margin-top: 8px;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 
@@ -588,6 +747,9 @@
             <div class="header-buttons">
                 <button class="icon-btn" onclick="toggleTheme()" id="theme-toggle-btn" data-tooltip="Dark Mode">
                     <span id="theme-icon">🌙</span>
+                </button>
+                <button class="icon-btn" onclick="openConfigModal()" data-tooltip="Configure Sources">
+                    📋
                 </button>
                 <button class="icon-btn" onclick="openApiKeyModal()" data-tooltip="Settings">
                     ⚙️
@@ -700,6 +862,45 @@
                     <button type="submit" class="btn btn-primary">Save Keys</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Configure Sources Modal -->
+    <div class="modal" id="configModal">
+        <div class="modal-content">
+            <h3>📋 Configure Sources</h3>
+
+            <div class="config-tabs">
+                <button class="config-tab-btn active" data-tab="youtube" onclick="switchConfigTab('youtube')">📺 YouTube Channels</button>
+                <button class="config-tab-btn" data-tab="substack" onclick="switchConfigTab('substack')">✍️ Substack Publications</button>
+            </div>
+
+            <!-- YouTube Panel -->
+            <div class="config-panel active" id="config-panel-youtube">
+                <p class="source-help">
+                    Enter a <strong>Channel ID</strong> (starts with <code>UC…</code>) or an <strong>Uploads Playlist ID</strong> (starts with <code>UU…</code>).
+                    Channel IDs are auto-converted. Find the channel ID on the channel's About page or in its URL.
+                </p>
+                <div class="source-list" id="yt-source-list"></div>
+                <button class="add-source-btn" onclick="addYtChannel()">+ Add Channel</button>
+            </div>
+
+            <!-- Substack Panel -->
+            <div class="config-panel" id="config-panel-substack">
+                <p class="source-help">
+                    Enter the base URL of each publication (e.g. <code>https://example.substack.com</code>).
+                    Custom domains work too. Saving will clear the article cache and reload.
+                </p>
+                <div class="source-list" id="substack-source-list"></div>
+                <button class="add-source-btn" onclick="addSubstackFeed()">+ Add Publication</button>
+            </div>
+
+            <p class="config-footer-note">Saving clears the cache and triggers a fresh fetch.</p>
+
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeConfigModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveConfig()">Save &amp; Reload</button>
+            </div>
         </div>
     </div>
 
@@ -896,6 +1097,201 @@
             if (e.target === this) {
                 closeApiKeyModal();
             }
+        });
+
+        // ============================================
+        // SOURCE CONFIGURATION (localStorage)
+        // ============================================
+
+        const YT_CHANNELS_KEY = 'dashboard_yt_channels';
+        const SUBSTACK_FEEDS_KEY = 'dashboard_substack_feeds';
+
+        // In-modal editing state
+        let configYtChannels = [];
+        let configSubstackFeeds = [];
+
+        function escapeAttr(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function normalizeYtId(raw) {
+            const val = raw.trim();
+            // Auto-convert channel ID (UC…) to uploads playlist ID (UU…)
+            if (/^UC[A-Za-z0-9_-]{20,}$/.test(val)) {
+                return 'UU' + val.slice(2);
+            }
+            return val;
+        }
+
+        function loadSavedYtChannels() {
+            const saved = localStorage.getItem(YT_CHANNELS_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed)) return parsed;
+                } catch (e) {}
+            }
+            return CONFIG.youtubePlaylistIds.map(id => ({ id, label: '' }));
+        }
+
+        function loadSavedSubstackFeeds() {
+            const saved = localStorage.getItem(SUBSTACK_FEEDS_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed)) return parsed;
+                } catch (e) {}
+            }
+            return CONFIG.substackFeeds.slice();
+        }
+
+        // --- Render helpers ---
+
+        function renderConfigYt() {
+            const list = document.getElementById('yt-source-list');
+            if (configYtChannels.length === 0) {
+                list.innerHTML = '<div class="source-list-empty">No channels — click "+ Add Channel" to add one.</div>';
+                return;
+            }
+            list.innerHTML = configYtChannels.map((ch, i) => `
+                <div class="source-item">
+                    <input type="text" class="source-label" placeholder="Label (optional)"
+                           value="${escapeAttr(ch.label || '')}">
+                    <input type="text" placeholder="Channel ID (UC…) or Playlist ID (UU…)"
+                           value="${escapeAttr(ch.id || '')}">
+                    <button class="source-remove-btn" onclick="removeYtChannel(${i})" title="Remove">✕</button>
+                </div>
+            `).join('');
+        }
+
+        function renderConfigSubstack() {
+            const list = document.getElementById('substack-source-list');
+            if (configSubstackFeeds.length === 0) {
+                list.innerHTML = '<div class="source-list-empty">No publications — click "+ Add Publication" to add one.</div>';
+                return;
+            }
+            list.innerHTML = configSubstackFeeds.map((url, i) => `
+                <div class="source-item">
+                    <input type="url" placeholder="https://example.substack.com"
+                           value="${escapeAttr(url || '')}">
+                    <button class="source-remove-btn" onclick="removeSubstackFeed(${i})" title="Remove">✕</button>
+                </div>
+            `).join('');
+        }
+
+        // --- Sync DOM → state before any mutation ---
+
+        function syncYtFromDom() {
+            const items = document.querySelectorAll('#yt-source-list .source-item');
+            configYtChannels = Array.from(items).map(item => {
+                const inputs = item.querySelectorAll('input');
+                return { label: inputs[0].value, id: inputs[1].value };
+            });
+        }
+
+        function syncSubstackFromDom() {
+            const items = document.querySelectorAll('#substack-source-list .source-item');
+            configSubstackFeeds = Array.from(items).map(item => item.querySelector('input').value);
+        }
+
+        // --- Add / Remove ---
+
+        function addYtChannel() {
+            syncYtFromDom();
+            configYtChannels.push({ id: '', label: '' });
+            renderConfigYt();
+            const list = document.getElementById('yt-source-list');
+            list.scrollTop = list.scrollHeight;
+            const lastId = list.querySelector('.source-item:last-child input:nth-child(2)');
+            if (lastId) lastId.focus();
+        }
+
+        function removeYtChannel(index) {
+            syncYtFromDom();
+            configYtChannels.splice(index, 1);
+            renderConfigYt();
+        }
+
+        function addSubstackFeed() {
+            syncSubstackFromDom();
+            configSubstackFeeds.push('');
+            renderConfigSubstack();
+            const list = document.getElementById('substack-source-list');
+            list.scrollTop = list.scrollHeight;
+            const lastInput = list.querySelector('.source-item:last-child input');
+            if (lastInput) lastInput.focus();
+        }
+
+        function removeSubstackFeed(index) {
+            syncSubstackFromDom();
+            configSubstackFeeds.splice(index, 1);
+            renderConfigSubstack();
+        }
+
+        // --- Tab switching ---
+
+        function switchConfigTab(tab) {
+            document.querySelectorAll('.config-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+            document.querySelectorAll('.config-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.id === 'config-panel-' + tab);
+            });
+        }
+
+        // --- Open / Close / Save ---
+
+        function openConfigModal() {
+            configYtChannels = loadSavedYtChannels();
+            configSubstackFeeds = loadSavedSubstackFeeds();
+            renderConfigYt();
+            renderConfigSubstack();
+            switchConfigTab('youtube');
+            document.getElementById('configModal').classList.add('active');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('configModal').classList.remove('active');
+        }
+
+        function saveConfig() {
+            syncYtFromDom();
+            syncSubstackFromDom();
+
+            const validYtChannels = configYtChannels
+                .map(ch => ({ id: normalizeYtId(ch.id), label: ch.label.trim() }))
+                .filter(ch => ch.id.length > 0);
+
+            const validSubstackFeeds = configSubstackFeeds
+                .map(url => url.trim())
+                .filter(url => url.length > 0);
+
+            localStorage.setItem(YT_CHANNELS_KEY, JSON.stringify(validYtChannels));
+            localStorage.setItem(SUBSTACK_FEEDS_KEY, JSON.stringify(validSubstackFeeds));
+
+            // Apply to runtime CONFIG
+            CONFIG.youtubePlaylistIds = validYtChannels.map(ch => ch.id);
+            CONFIG.substackFeeds = validSubstackFeeds;
+
+            // Clear both caches so data is re-fetched
+            localStorage.removeItem(CACHE_KEYS.videos);
+            localStorage.removeItem(CACHE_KEYS.timestamp);
+            localStorage.removeItem(CACHE_KEYS.articles);
+            localStorage.removeItem(CACHE_KEYS.articlesTimestamp);
+
+            closeConfigModal();
+
+            fetchYouTubeVideos(true);
+            fetchSubstackArticles(true);
+        }
+
+        // Close config modal when clicking outside
+        document.getElementById('configModal').addEventListener('click', function (e) {
+            if (e.target === this) closeConfigModal();
         });
 
         // ============================================
@@ -1581,6 +1977,28 @@
         // ============================================
         // INITIALIZATION
         // ============================================
+
+        // Apply any user-saved source configuration to CONFIG before first fetch
+        (function applySavedSources() {
+            const savedYt = localStorage.getItem(YT_CHANNELS_KEY);
+            if (savedYt) {
+                try {
+                    const channels = JSON.parse(savedYt);
+                    if (Array.isArray(channels) && channels.length > 0) {
+                        CONFIG.youtubePlaylistIds = channels.map(ch => ch.id).filter(Boolean);
+                    }
+                } catch (e) {}
+            }
+            const savedSs = localStorage.getItem(SUBSTACK_FEEDS_KEY);
+            if (savedSs) {
+                try {
+                    const feeds = JSON.parse(savedSs);
+                    if (Array.isArray(feeds) && feeds.length > 0) {
+                        CONFIG.substackFeeds = feeds.filter(Boolean);
+                    }
+                } catch (e) {}
+            }
+        })();
 
         // Clean up old archived items (older than 14 days)
         cleanupOldArchivedItems();
