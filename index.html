@@ -662,8 +662,8 @@
 
         .source-item {
             display: flex;
-            gap: 7px;
-            align-items: center;
+            flex-direction: column;
+            gap: 4px;
             padding: 7px 10px;
             border-bottom: 1px solid var(--border);
         }
@@ -672,8 +672,13 @@
             border-bottom: none;
         }
 
+        .source-row {
+            display: flex;
+            gap: 7px;
+            align-items: center;
+        }
+
         .source-item input {
-            flex: 1;
             min-width: 0;
             padding: 6px 9px;
             border: 1px solid var(--border);
@@ -683,13 +688,117 @@
             font-size: 0.87em;
         }
 
-        .source-item input.source-label {
-            flex: 0 0 140px;
+        .source-item input.source-name {
+            flex: 1 1 auto;
+            font-weight: 500;
+        }
+
+        .source-item input.source-id {
+            flex: 0 0 200px;
+            font-family: monospace;
+            font-size: 0.8em;
+            color: var(--text-light);
         }
 
         .source-item input:focus {
             outline: none;
             border-color: var(--secondary);
+            color: var(--text);
+        }
+
+        .source-lookup-btn {
+            flex-shrink: 0;
+            background: none;
+            color: var(--secondary);
+            border: 1px solid var(--secondary);
+            border-radius: 4px;
+            padding: 5px 9px;
+            font-size: 0.8em;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .source-lookup-btn:hover {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .source-lookup-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .source-status {
+            font-size: 0.8em;
+            line-height: 1.4;
+            color: var(--text-light);
+            padding-left: 2px;
+        }
+
+        .source-status:empty {
+            display: none;
+        }
+
+        .source-status.success {
+            color: var(--success);
+        }
+
+        .source-status.error {
+            color: var(--accent);
+        }
+
+        .lookup-results {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .lookup-result {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--background);
+            cursor: pointer;
+            text-align: left;
+            color: var(--text);
+            font-size: 0.85em;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .lookup-result:hover {
+            border-color: var(--secondary);
+            background: rgba(52, 152, 219, 0.08);
+        }
+
+        .lookup-result img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: var(--border);
+        }
+
+        .lookup-result-text {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .lookup-result-title {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .lookup-result-desc {
+            color: var(--text-light);
+            font-size: 0.92em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .source-remove-btn {
@@ -878,8 +987,8 @@
             <!-- YouTube Panel -->
             <div class="config-panel active" id="config-panel-youtube">
                 <p class="source-help">
-                    Enter a <strong>Channel ID</strong> (starts with <code>UC…</code>) or an <strong>Uploads Playlist ID</strong> (starts with <code>UU…</code>).
-                    Channel IDs are auto-converted. Find the channel ID on the channel's About page or in its URL.
+                    Type a <strong>channel name</strong> and click <strong>🔍 Look up</strong> to fetch its ID automatically (uses your YouTube API key).
+                    You can also paste a <strong>Channel ID</strong> (<code>UC…</code>) or <strong>Uploads Playlist ID</strong> (<code>UU…</code>) directly — channel IDs are auto-converted on save.
                 </p>
                 <div class="source-list" id="yt-source-list"></div>
                 <button class="add-source-btn" onclick="addYtChannel()">+ Add Channel</button>
@@ -910,39 +1019,40 @@
         // ============================================
 
         const CONFIG = {
-            // Your YouTube Uploads Playlist IDs (converted from channel IDs: UC -> UU)
-            youtubePlaylistIds: [
-                'UU8JOgFXp-I3YV6dsKqqQdUw',  // Caroline Winkler
-                'UU13w4dxfIGf_MM2qtyJ1aSA',  // Christy Anne Jones
-                'UUC0FFiHb6mSNKf4h455G0Gw',  // Everyday People do Business and Money
-                'UUnhpSiQ1iBJbt_euYU9myxA',  // Anna Howard
-                'UUk9Nz_upeYXu2DpEvs1HajQ',  // Snapdragon Life
-                'UUvnSyOfwtn7J14CYRbCaveQ',  // Rajiv Surendra
-                'UUSHtaUm-FjUps090S7crO4Q',  // Bernadette Banner
-                'UUoydhtfFSk1fZXNRnkGnneQ',  // ESOTERICA
-                'UUSwwoUNvQWgZDC8a_O6Qs_A',  // Kaz Rowe
-                'UUgz4oLdeKP1Pt2BpiUn2iXQ',  // V. Birchwood
-                'UUca-WkVPVe9nzs2iFct4wxg',  // Nicole Rudolph
-                'UU-SrCCzkGq0wmSAuRs7EBFg',  // Miniminuteman
-                'UUehBVAPy-bxmnbNARF-_tvA',  // More Perfect Union
-                'UUl05spNa1YKRfSnQyIdCxfg',  // The Cozy Creative
-                'UUbRP3c757lWg9M-U7TyEkXA',  // Theo - t3․gg
-                'UUhpleBmo18P08aKCIgti38g',  // Matt Wolfe
-                'UUqcbQf6yw5KzRoDDcZ_wBSw',  // Wes Roth
-                'UU5l7RouTQ60oUjLjt1Nh-UQ',  // AI Revolution
-                'UUIHKqzULI6b8yrfOV3uCx7A',  // endeavorance
-                'UUlFSU9_bUb4Rc6OYfTt5SPw',  // Philip DeFranco
-                'UU4e3Gm46D6hWqVyjwkgS33g',  // Under The Desk News
-                'UUpa-Zb0ZcQjTCPP1Dx_1M8Q',  // LegalEagle
-                'UUwWhs_6x42TyRM4Wstoq8HA',  // The Daily Show
-                'UUMtFAi84ehTSYSE9XoHefig',  // The Late Show with Stephen Colbert
-                'UUJHAT3Uvv-g3I8H3GhHWV7w',  // Ryan Hall, Y'all
-                'UUT6Y5JJPKe_JDMivpKgVXew',  // Fall of Civilizations
-                'UU22uGvImj3o7m9Zf11jEDkg',  // Cambrian Chronicles
-                'UUUVwT8zcS5Z_rYXnpomlbfg',  // Dan Davis History
-                'UUqUCj6qGiqnvSeBZCdfHUmQ',  // Rita Wilkins
-                'UUZdWrz8pF6B5Y_c6Zi6pmdQ',  // Decoding the Unknown
-                'UUergKLoy-Yv9zlPk3XQYK7Q',  // Crashing Out with Philip DeFranco & Alex Pearlman
+            // YouTube channels — each has a human-readable name and an Uploads Playlist ID
+            // (channel IDs starting with UC are auto-converted to UU on save)
+            youtubeChannels: [
+                { id: 'UU8JOgFXp-I3YV6dsKqqQdUw', name: 'Caroline Winkler' },
+                { id: 'UU13w4dxfIGf_MM2qtyJ1aSA', name: 'Christy Anne Jones' },
+                { id: 'UUC0FFiHb6mSNKf4h455G0Gw', name: 'Everyday People do Business and Money' },
+                { id: 'UUnhpSiQ1iBJbt_euYU9myxA', name: 'Anna Howard' },
+                { id: 'UUk9Nz_upeYXu2DpEvs1HajQ', name: 'Snapdragon Life' },
+                { id: 'UUvnSyOfwtn7J14CYRbCaveQ', name: 'Rajiv Surendra' },
+                { id: 'UUSHtaUm-FjUps090S7crO4Q', name: 'Bernadette Banner' },
+                { id: 'UUoydhtfFSk1fZXNRnkGnneQ', name: 'ESOTERICA' },
+                { id: 'UUSwwoUNvQWgZDC8a_O6Qs_A', name: 'Kaz Rowe' },
+                { id: 'UUgz4oLdeKP1Pt2BpiUn2iXQ', name: 'V. Birchwood' },
+                { id: 'UUca-WkVPVe9nzs2iFct4wxg', name: 'Nicole Rudolph' },
+                { id: 'UU-SrCCzkGq0wmSAuRs7EBFg', name: 'Miniminuteman' },
+                { id: 'UUehBVAPy-bxmnbNARF-_tvA', name: 'More Perfect Union' },
+                { id: 'UUl05spNa1YKRfSnQyIdCxfg', name: 'The Cozy Creative' },
+                { id: 'UUbRP3c757lWg9M-U7TyEkXA', name: 'Theo - t3.gg' },
+                { id: 'UUhpleBmo18P08aKCIgti38g', name: 'Matt Wolfe' },
+                { id: 'UUqcbQf6yw5KzRoDDcZ_wBSw', name: 'Wes Roth' },
+                { id: 'UU5l7RouTQ60oUjLjt1Nh-UQ', name: 'AI Revolution' },
+                { id: 'UUIHKqzULI6b8yrfOV3uCx7A', name: 'endeavorance' },
+                { id: 'UUlFSU9_bUb4Rc6OYfTt5SPw', name: 'Philip DeFranco' },
+                { id: 'UU4e3Gm46D6hWqVyjwkgS33g', name: 'Under The Desk News' },
+                { id: 'UUpa-Zb0ZcQjTCPP1Dx_1M8Q', name: 'LegalEagle' },
+                { id: 'UUwWhs_6x42TyRM4Wstoq8HA', name: 'The Daily Show' },
+                { id: 'UUMtFAi84ehTSYSE9XoHefig', name: 'The Late Show with Stephen Colbert' },
+                { id: 'UUJHAT3Uvv-g3I8H3GhHWV7w', name: "Ryan Hall, Y'all" },
+                { id: 'UUT6Y5JJPKe_JDMivpKgVXew', name: 'Fall of Civilizations' },
+                { id: 'UU22uGvImj3o7m9Zf11jEDkg', name: 'Cambrian Chronicles' },
+                { id: 'UUUVwT8zcS5Z_rYXnpomlbfg', name: 'Dan Davis History' },
+                { id: 'UUqUCj6qGiqnvSeBZCdfHUmQ', name: 'Rita Wilkins' },
+                { id: 'UUZdWrz8pF6B5Y_c6Zi6pmdQ', name: 'Decoding the Unknown' },
+                { id: 'UUergKLoy-Yv9zlPk3XQYK7Q', name: 'Crashing Out with Philip DeFranco & Alex Pearlman' },
             ],
 
             // Your Substack Newsletter URLs
@@ -1132,10 +1242,16 @@
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed)) return parsed;
+                    if (Array.isArray(parsed)) {
+                        // Normalize older entries that used `label` instead of `name`
+                        return parsed.map(ch => ({
+                            id: ch.id || '',
+                            name: ch.name || ch.label || ''
+                        }));
+                    }
                 } catch (e) {}
             }
-            return CONFIG.youtubePlaylistIds.map(id => ({ id, label: '' }));
+            return CONFIG.youtubeChannels.map(ch => ({ id: ch.id, name: ch.name || '' }));
         }
 
         function loadSavedSubstackFeeds() {
@@ -1158,12 +1274,16 @@
                 return;
             }
             list.innerHTML = configYtChannels.map((ch, i) => `
-                <div class="source-item">
-                    <input type="text" class="source-label" placeholder="Label (optional)"
-                           value="${escapeAttr(ch.label || '')}">
-                    <input type="text" placeholder="Channel ID (UC…) or Playlist ID (UU…)"
-                           value="${escapeAttr(ch.id || '')}">
-                    <button class="source-remove-btn" onclick="removeYtChannel(${i})" title="Remove">✕</button>
+                <div class="source-item" data-index="${i}">
+                    <div class="source-row">
+                        <input type="text" class="source-name" placeholder="Channel name (e.g. Bernadette Banner)"
+                               value="${escapeAttr(ch.name || '')}">
+                        <button class="source-lookup-btn" onclick="lookupYtChannel(${i})" title="Look up channel ID by name">🔍 Look up</button>
+                        <input type="text" class="source-id" placeholder="Channel/Playlist ID"
+                               value="${escapeAttr(ch.id || '')}">
+                        <button class="source-remove-btn" onclick="removeYtChannel(${i})" title="Remove">✕</button>
+                    </div>
+                    <div class="source-status" id="yt-status-${i}"></div>
                 </div>
             `).join('');
         }
@@ -1187,10 +1307,10 @@
 
         function syncYtFromDom() {
             const items = document.querySelectorAll('#yt-source-list .source-item');
-            configYtChannels = Array.from(items).map(item => {
-                const inputs = item.querySelectorAll('input');
-                return { label: inputs[0].value, id: inputs[1].value };
-            });
+            configYtChannels = Array.from(items).map(item => ({
+                name: item.querySelector('.source-name').value,
+                id: item.querySelector('.source-id').value
+            }));
         }
 
         function syncSubstackFromDom() {
@@ -1202,18 +1322,142 @@
 
         function addYtChannel() {
             syncYtFromDom();
-            configYtChannels.push({ id: '', label: '' });
+            configYtChannels.push({ id: '', name: '' });
             renderConfigYt();
             const list = document.getElementById('yt-source-list');
             list.scrollTop = list.scrollHeight;
-            const lastId = list.querySelector('.source-item:last-child input:nth-child(2)');
-            if (lastId) lastId.focus();
+            const lastName = list.querySelector('.source-item:last-child .source-name');
+            if (lastName) lastName.focus();
         }
 
         function removeYtChannel(index) {
             syncYtFromDom();
             configYtChannels.splice(index, 1);
             renderConfigYt();
+        }
+
+        // --- YouTube channel-name lookup ---
+
+        // Cache results in memory so re-clicking the picker doesn't refetch
+        const ytLookupCache = new Map();
+
+        function setYtStatus(index, html, kind) {
+            const el = document.getElementById('yt-status-' + index);
+            if (!el) return;
+            el.innerHTML = html || '';
+            el.className = 'source-status' + (kind ? ' ' + kind : '');
+        }
+
+        async function lookupYtChannel(index) {
+            const apiKey = getApiKey();
+            if (!apiKey) {
+                setYtStatus(index, '⚠ Set your YouTube API key in Settings (⚙️) first.', 'error');
+                return;
+            }
+
+            // Read the current name straight from the DOM (avoids re-rendering and losing focus)
+            const item = document.querySelector(`#yt-source-list .source-item[data-index="${index}"]`);
+            if (!item) return;
+            const nameInput = item.querySelector('.source-name');
+            const lookupBtn = item.querySelector('.source-lookup-btn');
+            const query = (nameInput.value || '').trim();
+
+            if (!query) {
+                setYtStatus(index, '⚠ Enter a channel name first.', 'error');
+                nameInput.focus();
+                return;
+            }
+
+            setYtStatus(index, 'Searching YouTube…', '');
+            if (lookupBtn) lookupBtn.disabled = true;
+
+            try {
+                let items = ytLookupCache.get(query.toLowerCase());
+                if (!items) {
+                    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&maxResults=5&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+                    const resp = await fetch(url);
+                    if (!resp.ok) {
+                        const errBody = await resp.json().catch(() => null);
+                        const msg = (errBody && errBody.error && errBody.error.message) || `HTTP ${resp.status}`;
+                        throw new Error(msg);
+                    }
+                    const data = await resp.json();
+                    items = (data && data.items) || [];
+                    ytLookupCache.set(query.toLowerCase(), items);
+                }
+
+                if (items.length === 0) {
+                    setYtStatus(index, '⚠ No matching channels found.', 'error');
+                    return;
+                }
+
+                if (items.length === 1) {
+                    applyYtLookupResult(index, items[0], { auto: true });
+                    return;
+                }
+
+                // Multiple matches — show a picker. Top result is highlighted; others listed below.
+                renderYtLookupPicker(index, items);
+            } catch (err) {
+                setYtStatus(index, `⚠ Lookup failed: ${escapeAttr(err.message || String(err))}`, 'error');
+            } finally {
+                if (lookupBtn) lookupBtn.disabled = false;
+            }
+        }
+
+        function renderYtLookupPicker(index, items) {
+            const safe = (s) => escapeAttr(s || '');
+            const cardsHtml = items.map((it, i) => {
+                const snip = it.snippet || {};
+                const thumb = (snip.thumbnails && (snip.thumbnails.default || snip.thumbnails.medium)) || {};
+                return `
+                    <button type="button" class="lookup-result" onclick="pickYtLookupResult(${index}, ${i})">
+                        <img src="${safe(thumb.url || '')}" alt="" onerror="this.style.visibility='hidden'">
+                        <div class="lookup-result-text">
+                            <div class="lookup-result-title">${safe(snip.title || it.id?.channelId || '(untitled)')}</div>
+                            <div class="lookup-result-desc">${safe(snip.description || '')}</div>
+                        </div>
+                    </button>`;
+            }).join('');
+
+            setYtStatus(
+                index,
+                `<div>${items.length} matches — pick the right one:</div><div class="lookup-results">${cardsHtml}</div>`,
+                ''
+            );
+
+            // Stash the items on the row for pickYtLookupResult to read back
+            const item = document.querySelector(`#yt-source-list .source-item[data-index="${index}"]`);
+            if (item) item._ytLookupItems = items;
+        }
+
+        function pickYtLookupResult(index, resultIndex) {
+            const item = document.querySelector(`#yt-source-list .source-item[data-index="${index}"]`);
+            if (!item || !item._ytLookupItems) return;
+            const result = item._ytLookupItems[resultIndex];
+            if (!result) return;
+            applyYtLookupResult(index, result, { auto: false });
+        }
+
+        function applyYtLookupResult(index, result, opts) {
+            const item = document.querySelector(`#yt-source-list .source-item[data-index="${index}"]`);
+            if (!item) return;
+            const channelId = result.id?.channelId;
+            if (!channelId) {
+                setYtStatus(index, '⚠ Result is missing a channel ID — try another match.', 'error');
+                return;
+            }
+            const playlistId = normalizeYtId(channelId);
+            const title = result.snippet?.title || '';
+
+            const idInput = item.querySelector('.source-id');
+            const nameInput = item.querySelector('.source-name');
+            if (idInput) idInput.value = playlistId;
+            // Only overwrite the typed name if it's empty (preserve the user's wording otherwise)
+            if (nameInput && !nameInput.value.trim() && title) nameInput.value = title;
+
+            const prefix = opts && opts.auto ? '✓ Single match — ' : '✓ Selected: ';
+            setYtStatus(index, `${prefix}<strong>${escapeAttr(title)}</strong> <span style="font-family:monospace;">(${escapeAttr(playlistId)})</span>`, 'success');
         }
 
         function addSubstackFeed() {
@@ -1263,7 +1507,7 @@
             syncSubstackFromDom();
 
             const validYtChannels = configYtChannels
-                .map(ch => ({ id: normalizeYtId(ch.id), label: ch.label.trim() }))
+                .map(ch => ({ id: normalizeYtId(ch.id), name: (ch.name || '').trim() }))
                 .filter(ch => ch.id.length > 0);
 
             const validSubstackFeeds = configSubstackFeeds
@@ -1274,7 +1518,7 @@
             localStorage.setItem(SUBSTACK_FEEDS_KEY, JSON.stringify(validSubstackFeeds));
 
             // Apply to runtime CONFIG
-            CONFIG.youtubePlaylistIds = validYtChannels.map(ch => ch.id);
+            CONFIG.youtubeChannels = validYtChannels;
             CONFIG.substackFeeds = validSubstackFeeds;
 
             // Clear both caches so data is re-fetched
@@ -1699,7 +1943,8 @@
                 // Cost: 1 unit per playlist (31 playlists = 31 units)
                 const allVideoData = [];
 
-                for (const playlistId of CONFIG.youtubePlaylistIds) {
+                for (const channel of CONFIG.youtubeChannels) {
+                    const playlistId = channel.id;
                     try {
                         const response = await fetch(
                             `https://www.googleapis.com/youtube/v3/playlistItems?key=${apiKey}&playlistId=${playlistId}&part=snippet&maxResults=10`
@@ -1985,7 +2230,12 @@
                 try {
                     const channels = JSON.parse(savedYt);
                     if (Array.isArray(channels) && channels.length > 0) {
-                        CONFIG.youtubePlaylistIds = channels.map(ch => ch.id).filter(Boolean);
+                        CONFIG.youtubeChannels = channels
+                            .map(ch => ({
+                                id: (ch.id || '').trim(),
+                                name: (ch.name || ch.label || '').trim()
+                            }))
+                            .filter(ch => ch.id);
                     }
                 } catch (e) {}
             }
