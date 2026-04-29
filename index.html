@@ -1348,6 +1348,11 @@
             el.className = 'source-status' + (kind ? ' ' + kind : '');
         }
 
+        function scrollYtStatusIntoView(index) {
+            const el = document.getElementById('yt-status-' + index);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
         async function lookupYtChannel(index) {
             const apiKey = getApiKey();
             if (!apiKey) {
@@ -1393,11 +1398,13 @@
 
                 if (items.length === 1) {
                     applyYtLookupResult(index, items[0], { auto: true });
+                    scrollYtStatusIntoView(index);
                     return;
                 }
 
                 // Multiple matches — show a picker. Top result is highlighted; others listed below.
                 renderYtLookupPicker(index, items);
+                scrollYtStatusIntoView(index);
             } catch (err) {
                 setYtStatus(index, `⚠ Lookup failed: ${escapeAttr(err.message || String(err))}`, 'error');
             } finally {
