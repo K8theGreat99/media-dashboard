@@ -643,6 +643,24 @@
             font-size: 1em;
         }
 
+        .source-search {
+            flex-shrink: 0;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 7px 10px;
+            margin-bottom: 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--background);
+            color: var(--text);
+            font-size: 0.88em;
+        }
+
+        .source-search:focus {
+            outline: none;
+            border-color: var(--secondary);
+        }
+
         .source-list {
             flex: 1;
             overflow-y: auto;
@@ -990,6 +1008,7 @@
                     Type a <strong>channel name</strong> and click <strong>🔍 Look up</strong> to fetch its ID automatically (uses your YouTube API key).
                     You can also paste a <strong>Channel ID</strong> (<code>UC…</code>) or <strong>Uploads Playlist ID</strong> (<code>UU…</code>) directly — channel IDs are auto-converted on save.
                 </p>
+                <input type="text" class="source-search" id="yt-search" placeholder="Filter channels…" oninput="filterYtChannels()">
                 <div class="source-list" id="yt-source-list"></div>
                 <button class="add-source-btn" onclick="addYtChannel()">+ Add Channel</button>
             </div>
@@ -1267,13 +1286,21 @@
 
         // --- Render helpers ---
 
-        function renderConfigYt() {
+        function renderConfigYt(filter) {
             const list = document.getElementById('yt-source-list');
             if (configYtChannels.length === 0) {
                 list.innerHTML = '<div class="source-list-empty">No channels — click "+ Add Channel" to add one.</div>';
                 return;
             }
-            list.innerHTML = configYtChannels.map((ch, i) => `
+            const q = (filter || '').toLowerCase().trim();
+            const visible = configYtChannels
+                .map((ch, i) => ({ ch, i }))
+                .filter(({ ch }) => !q || (ch.name || '').toLowerCase().includes(q) || (ch.id || '').toLowerCase().includes(q));
+            if (visible.length === 0) {
+                list.innerHTML = '<div class="source-list-empty">No channels match your search.</div>';
+                return;
+            }
+            list.innerHTML = visible.map(({ ch, i }) => `
                 <div class="source-item" data-index="${i}">
                     <div class="source-row">
                         <input type="text" class="source-name" placeholder="Channel name (e.g. Bernadette Banner)"
@@ -1306,11 +1333,13 @@
         // --- Sync DOM → state before any mutation ---
 
         function syncYtFromDom() {
-            const items = document.querySelectorAll('#yt-source-list .source-item');
-            configYtChannels = Array.from(items).map(item => ({
-                name: item.querySelector('.source-name').value,
-                id: item.querySelector('.source-id').value
-            }));
+            document.querySelectorAll('#yt-source-list .source-item').forEach(item => {
+                const idx = parseInt(item.dataset.index, 10);
+                configYtChannels[idx] = {
+                    name: item.querySelector('.source-name').value,
+                    id: item.querySelector('.source-id').value
+                };
+            });
         }
 
         function syncSubstackFromDom() {
@@ -1320,9 +1349,15 @@
 
         // --- Add / Remove ---
 
+        function filterYtChannels() {
+            syncYtFromDom();
+            renderConfigYt(document.getElementById('yt-search').value);
+        }
+
         function addYtChannel() {
             syncYtFromDom();
             configYtChannels.push({ id: '', name: '' });
+            document.getElementById('yt-search').value = '';
             renderConfigYt();
             const list = document.getElementById('yt-source-list');
             list.scrollTop = list.scrollHeight;
@@ -1333,7 +1368,7 @@
         function removeYtChannel(index) {
             syncYtFromDom();
             configYtChannels.splice(index, 1);
-            renderConfigYt();
+            renderConfigYt(document.getElementById('yt-search').value);
         }
 
         // --- YouTube channel-name lookup ---
@@ -1499,6 +1534,7 @@
         function openConfigModal() {
             configYtChannels = loadSavedYtChannels();
             configSubstackFeeds = loadSavedSubstackFeeds();
+            document.getElementById('yt-search').value = '';
             renderConfigYt();
             renderConfigSubstack();
             switchConfigTab('youtube');
