@@ -15,21 +15,23 @@ Add a "Queue" feature to the existing Media Dashboard that allows the user to cu
 ## Data Model
 
 ### New localStorage key
-`mediaDashboard_queue` — array of queue item objects.
+`media_dashboard_queue` — array of queue item objects. (Named to match the existing `snake_case` convention used by all other keys in the codebase, e.g. `media_dashboard_theme`, `archived_items`.)
 
 Each queue item:
 ```
 {
   videoId: string,
   title: string,
-  thumbnailUrl: string,
-  channelName: string,
-  duration: string,         // already-formatted display duration
-  durationSeconds: number,  // for percentage calculations
-  watched: boolean,         // true when 90% playback reached OR user clicked Archive button on player
-  addedAt: number           // timestamp, for ordering by add-order if needed
+  thumbnail: string,            // matches the `thumbnail` field name used in the video cache
+  channelTitle: string,         // matches the `channelTitle` field name used in the video cache
+  durationFormatted: string,    // already-formatted display duration; matches `durationFormatted` in cache
+  durationSeconds: number,      // for percentage calculations
+  watched: boolean,             // true when 90% playback reached OR user clicked Archive button on player
+  addedAt: number               // timestamp, for ordering by add-order if needed
 }
 ```
+
+**Field name note:** When populating a queue item from a cached video object, copy fields directly — no renaming needed. The field names above match exactly what the fetch pipeline stores.
 
 Order in the array IS the playback order. Reordering the array reorders playback.
 
@@ -65,14 +67,14 @@ Each YouTube video card gets a new "Queue" icon button, behaving similarly to th
   - Background is GREEN
   - Instead of the queue icon, a WHITE NUMBER is displayed showing the video's position in the queue (1, 2, 3...)
   - Click → removes the video from the queue. All other queued videos renumber accordingly.
-- **Position:** corner of the thumbnail, similar/symmetrical to the archive X button. Adjust as needed so it doesn't overlap with the duration badge.
+- **Position:** Direct child of `.content-card` (same DOM layer as the existing `.archive-btn`), positioned absolute on the right side of the card, **below** the archive button with a small gap between them (e.g. `top: 44px; right: 8px` — the archive button sits at `top: 8px; right: 8px`). The gap is intentional to reduce the chance of accidentally clicking one when meaning to click the other. Do NOT place inside `.thumbnail-container`.
 - **Dark mode:** both states must support light and dark themes.
 
 ### 2. Queue badge in YouTube section header
 
 A new badge in the YouTube section header.
 
-- **Location:** between the existing "API Key Set" badge and the "Last updated" text.
+- **Location:** A new flex element in the YouTube section header row, inserted between the `<h2>` title element and the `.cache-info` div (which contains "Last updated" and "Refreshes"). The section header uses `display: flex; justify-content: space-between`, so adding a new sibling element naturally slots it into the row.
 - **Visibility:** only appears when the queue has at least one video. Hidden when queue is empty.
 - **Content:** `Queue (N) ▶` where N is the queue count.
 - **Two clickable zones:**
@@ -280,6 +282,7 @@ Recommend implementing in **two passes** to make testing manageable:
 ### Pass 1: Queue infrastructure (no player)
 - localStorage data model and helper functions (add, remove, reorder, clear, toggle watched, etc.)
 - Queue icon button on thumbnails (both states)
+- A dedicated `updateQueueIcons()` function that walks all `.content-card` elements in the DOM and updates only the queue badge on each card (position number, green state, hidden state) without calling `renderVideos()`. This is necessary because `renderVideos()` uses `innerHTML` bulk re-rendering, which would reset scroll position on every queue change. `updateQueueIcons()` should be called any time the queue array changes (add, remove, reorder).
 - Queue badge in YouTube section header
 - Queue modal
 - Clear All with undo toast (without confirmation modal yet, since nothing is "watched" without the player)
