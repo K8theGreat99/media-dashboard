@@ -277,6 +277,20 @@ This pattern only applies when there are no watched videos. If watched videos ex
 
 ---
 
+## Dependencies
+
+### Drag-and-drop: SortableJS (CDN)
+The queue modal and queue panel both require drag-and-drop reordering. Use **SortableJS** loaded via CDN `<script>` tag — it handles both mouse and touch events natively, which matters since native HTML5 drag-and-drop is broken on mobile without a polyfill. No other libraries are needed; everything else is vanilla JS.
+
+Add to `<head>`:
+```html
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+```
+
+Initialize on each list when it is rendered (modal and panel each get their own `Sortable` instance). On the `onEnd` callback, re-sync the queue array to match the new DOM order and call `updateQueueIcons()`.
+
+---
+
 ## Implementation Approach (Suggested)
 
 Recommend implementing in **two passes** to make testing manageable:
