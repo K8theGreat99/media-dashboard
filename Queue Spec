@@ -169,6 +169,8 @@ Visible whenever the player is active, regardless of play/pause state. Functions
 - When accumulated watched time ≥ 90% of `durationSeconds`, mark the video as `watched: true`.
 - Visual update: the video grays out in all queue views.
 
+**Zero-duration videos (`durationSeconds === 0`):** In practice, zero duration means one of two things: (1) a scheduled/premiere video that hasn't gone live yet — the player won't play it, so no tracking occurs and it sits inert in the queue; or (2) a live stream currently in progress — the player can play it but the total duration is unknown. For both cases, skip the 90% threshold entirely and rely solely on the IFrame API `ended` event to mark the video as `watched: true`. For case (1), `ended` never fires so the video is never auto-marked watched (correct). For case (2), `ended` fires when the stream concludes (reasonable). The user can always use the manual **Archive** button in the player to mark a zero-duration video watched at any time.
+
 ### Auto-advance
 - When the current video ends (IFrame API "ended" event), automatically load the next UNWATCHED video in the queue.
 - "Next unwatched" means: scan the queue in order from the current position, find the next item with `watched: false`.
