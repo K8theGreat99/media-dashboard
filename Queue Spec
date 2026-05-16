@@ -15,7 +15,7 @@ Add a "Queue" feature to the existing Media Dashboard that allows the user to cu
 ## Data Model
 
 ### New localStorage key
-`media_dashboard_queue` — array of queue item objects. (Named to match the existing `snake_case` convention used by all other keys in the codebase, e.g. `media_dashboard_theme`, `archived_items`.)
+`media_dashboard_queue` — array of queue item objects.
 
 Each queue item:
 ```
