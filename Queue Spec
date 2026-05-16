@@ -1,0 +1,315 @@
+# Media Dashboard — Queue Feature Specification
+
+## Overview
+
+Add a "Queue" feature to the existing Media Dashboard that allows the user to curate a playlist of YouTube videos from the dashboard feed, then play them sequentially in an embedded player with auto-advance. Inspired by YouTube's "watch later" / queue model but built around the dashboard's intentional-consumption philosophy.
+
+**Key principles:**
+- Self-contained: no YouTube account integration, no OAuth, no additional API quota usage.
+- Uses YouTube IFrame Player API for embed and event handling (free, separate from Data API quota).
+- All queue state persists in `localStorage` under a new key.
+- Integrates with the existing archive system, but with a deliberate two-stage flow (watched → archived) to protect against losing videos when the user steps away from the computer.
+
+---
+
+## Data Model
+
+### New localStorage key
+`mediaDashboard_queue` — array of queue item objects.
+
+Each queue item:
+```
+{
+  videoId: string,
+  title: string,
+  thumbnailUrl: string,
+  channelName: string,
+  duration: string,         // already-formatted display duration
+  durationSeconds: number,  // for percentage calculations
+  watched: boolean,         // true when 90% playback reached OR user clicked Archive button on player
+  addedAt: number           // timestamp, for ordering by add-order if needed
+}
+```
+
+Order in the array IS the playback order. Reordering the array reorders playback.
+
+---
+
+## Two-Stage Status Model (Important)
+
+A video in the queue has two possible states:
+
+1. **Unwatched** — default state when added to queue.
+2. **Watched** — marked via 90% playback threshold OR the player's "Archive" button. Visually grayed in queue list. NOT YET removed from the main dashboard feed.
+
+**Watched videos only become truly archived (removed from dashboard feed and added to the archive system) when the user confirms session end** via the confirmation modal. This protects against the scenario where a user steps away from the computer, videos auto-play, and they want to go back and rewatch missed content.
+
+**UI terminology note:** despite the two-stage backend, the user-facing button on the player says **"Archive"** (not "Mark as Watched") to stay consistent with the existing dashboard vocabulary. The user doesn't need to understand the two-stage flow — to them, archiving just happens, and eventually it does.
+
+---
+
+## UI Components
+
+### 1. Queue icon on YouTube thumbnails
+
+Each YouTube video card gets a new "Queue" icon button, behaving similarly to the existing archive X button:
+
+- **Icon style:** playlist-style icon (stacked horizontal lines with a play triangle, similar to YouTube's playlist icon). Use SVG for crispness and theme support.
+- **Default state (video NOT in queue):**
+  - Icon is HIDDEN by default
+  - Appears on hover over the thumbnail (mirroring the existing archive X button behavior)
+  - Dark/neutral background with white icon
+  - Click → adds the video to the queue
+- **Active state (video IS in queue):**
+  - Icon is VISIBLE AT ALL TIMES (not just on hover)
+  - Background is GREEN
+  - Instead of the queue icon, a WHITE NUMBER is displayed showing the video's position in the queue (1, 2, 3...)
+  - Click → removes the video from the queue. All other queued videos renumber accordingly.
+- **Position:** corner of the thumbnail, similar/symmetrical to the archive X button. Adjust as needed so it doesn't overlap with the duration badge.
+- **Dark mode:** both states must support light and dark themes.
+
+### 2. Queue badge in YouTube section header
+
+A new badge in the YouTube section header.
+
+- **Location:** between the existing "API Key Set" badge and the "Last updated" text.
+- **Visibility:** only appears when the queue has at least one video. Hidden when queue is empty.
+- **Content:** `Queue (N) ▶` where N is the queue count.
+- **Two clickable zones:**
+  - The **play button (▶ portion)** — clicking launches the player directly without opening the modal.
+  - The **rest of the badge** ("Queue (N)" text) — clicking opens the queue modal.
+- **Dark mode:** must support both themes.
+
+### 3. Queue modal
+
+Opens when the user clicks the non-play portion of the Queue badge.
+
+**Purpose:** lets the user view, reorder, and edit the queue without starting the player. Useful while building a queue.
+
+**Contents:**
+- Modal header with title "Queue" and a close X
+- A "Play" button at the top of the modal (launches the player)
+- The list of queued videos:
+  - Thumbnail (small)
+  - Title
+  - Channel name
+  - Position number
+  - Watched videos appear grayed out
+  - Drag handles for reorder
+  - Individual remove (X) button per item
+  - "Watch Again" button (with eye icon) appears on watched/grayed items only — clicking toggles the item back to unwatched in its current position
+- A "Clear All" button at the bottom
+- Standard modal close behavior (X, escape key, click outside)
+
+### 4. Player section
+
+Appears when the user starts the player. Pushes other dashboard content down (new section, not a modal overlay).
+
+**Contents:**
+- Embedded YouTube IFrame player, responsive 16:9
+- Below the player:
+  - Current video title
+  - Channel name
+  - Position indicator ("Video 2 of 5")
+  - Control buttons: **Previous**, **Next**, **Archive** (marks current video as watched — see two-stage model), **Close** (X)
+- Below the controls, a **Queue panel** (see next section)
+
+### 5. Queue panel (below player)
+
+Visible whenever the player is active, regardless of play/pause state. Functions like YouTube's "Up Next" panel.
+
+**Contents:**
+- Same queue list as in the modal: thumbnails, titles, position numbers, drag handles, individual remove buttons, Watch Again buttons on watched items, Clear All button.
+- **Currently playing video** is highlighted with:
+  - A subtle glow around the outside of the item
+  - Changed background color for that row
+- Watched (grayed) videos remain functional for reordering and removal — graying is purely visual.
+- Stays in sync with the modal (same underlying data).
+
+---
+
+## Behavior & Logic
+
+### Adding to queue
+- Click queue icon on a thumbnail (when not in queue) → adds video to end of queue array.
+- All open queue views (modal, panel) update immediately.
+- The Queue badge appears in the YouTube section header if it wasn't already visible.
+
+### Removing from queue
+- Click queue icon on a thumbnail (when in queue) → removes from queue.
+- Click X on a queue item in the modal or panel → removes from queue.
+- All views update immediately. Position numbers on remaining items renumber.
+- If queue becomes empty AND player is not active, the Queue badge disappears.
+
+### Reordering
+- Drag-and-drop in the modal or panel.
+- All views update immediately.
+- Position numbers on thumbnails update.
+
+### Watch Again (on watched/grayed items)
+- Toggles the item back to `watched: false`.
+- Keeps the item in its current position in the queue (does NOT move it to "play next").
+- Gray styling is removed.
+- If the user wants it to play next, they can drag it manually.
+
+### Starting the player
+- Triggered by:
+  - Clicking the play button (▶) inside the Queue badge
+  - Clicking the "Play" button inside the Queue modal
+- Player section appears and pushes other content down.
+- First unwatched video in the queue starts playing.
+- If all videos in queue are already watched, see "Queue complete" section below.
+
+### Playback tracking
+- Use YouTube IFrame Player API.
+- Poll current playback time periodically (every ~1 second is fine).
+- Track **actual playback time** — not playhead position. This means we accumulate watched seconds only when the video is in PLAYING state. If the user scrubs forward, the scrubbed portion does NOT count.
+- When accumulated watched time ≥ 90% of `durationSeconds`, mark the video as `watched: true`.
+- Visual update: the video grays out in all queue views.
+
+### Auto-advance
+- When the current video ends (IFrame API "ended" event), automatically load the next UNWATCHED video in the queue.
+- "Next unwatched" means: scan the queue in order from the current position, find the next item with `watched: false`.
+- If no more unwatched videos remain, trigger the "Queue complete" flow.
+
+### Manual controls
+- **Next** button: skip to the next unwatched video. Does NOT mark current as watched (unless 90% was already reached).
+- **Previous** button: jump back to the previous video in the queue (whether watched or not — user can re-watch).
+- **Archive** button: marks the current video as watched immediately (sets `watched: true`). Does not automatically advance to next — user can keep watching if they want.
+- **Close (X)** button: triggers session-end logic (see below).
+
+### Removing the currently-playing video
+- Allowed.
+- Player advances to the next unwatched video.
+- The removed video disappears from the queue.
+- If the removed video was the last one, triggers "Queue complete" flow.
+
+---
+
+## Session-End Logic
+
+A "session" is the period during which the player is active. Ending the session may trigger a confirmation modal.
+
+### What ends a session?
+
+1. **User clicks Close (X) on the player** → check for watched videos:
+   - If watched videos exist → show **Session-end confirmation modal**
+   - If no watched videos → close player immediately, no modal
+2. **Last unwatched video finishes playing (queue runs out)** → show **Queue-complete confirmation modal** (always shown, even if no watched videos? See note below)
+3. **User clicks Clear All** in modal or panel → check for watched videos:
+   - If watched videos exist → show **Session-end confirmation modal**, with the action being clear-all rather than just close
+   - If no watched videos → clear immediately with **undo toast** (see below)
+4. **User closes the browser tab or navigates away** → no modal possible; state persists as-is. User returns later to same state.
+
+**Note on case 2:** "Queue complete" means the queue ran out of unwatched videos. If the user has been watching, there will be watched videos to archive. If somehow the queue ran out without any watched videos (edge case — user manually removed everything while playing?), the player just closes silently. The Queue-complete modal only appears when there is something to archive.
+
+### Confirmation modal — two variants
+
+Both modals have the same button options:
+- **Archive Videos** (confirms): all videos with `watched: true` are added to the archive system (using the same archive flow that the existing X-on-thumbnail uses). They are then removed from the queue. Unwatched videos remain in the queue. Player closes.
+- **Return to Queue** (cancels): modal closes, player stays active, no state changes.
+
+**Variant A — Session-end (triggered by closing player or Clear All):**
+
+> **End session?**
+> 
+> Watched videos will be archived.
+> 
+> *Once the dashboard is refreshed, archived videos will disappear. You won't be able to access them.*
+> 
+> [Archive Videos]  [Return to Queue]
+
+**Variant B — Queue complete (triggered when last unwatched video finishes):**
+
+> **Queue complete**
+> 
+> You've reached the end of your queue. Watched videos will be archived.
+> 
+> *Once the dashboard is refreshed, archived videos will disappear. You won't be able to access them.*
+> 
+> [Archive Videos]  [Return to Queue]
+
+The user (Kate) may revise the exact wording later. The important thing is the LOGIC for selecting which modal appears.
+
+### Clear All — undo toast (no-stakes variant)
+
+When the user clicks Clear All and there are NO watched videos in the queue (e.g., they're still building the queue and haven't played anything yet), no confirmation modal is needed. Instead:
+
+- Queue is cleared immediately.
+- A toast/snackbar appears at the bottom of the screen with text like "Queue cleared" and an "Undo" link/button.
+- Toast stays visible for **15 seconds**, then fades out.
+- Clicking "Undo" restores the queue to its pre-clear state.
+- After fade-out or any other queue modification, undo is no longer available.
+
+This pattern only applies when there are no watched videos. If watched videos exist, the full confirmation modal is used instead (because the stakes are higher — losing archive logging).
+
+---
+
+## Integration with Existing Systems
+
+### Archive system
+- The Queue feature uses the existing archive functionality.
+- When confirmation modal's "Archive Videos" is clicked, each watched video is archived using the same code path that the existing X-on-thumbnail archive button uses.
+- Archived videos follow the existing 14-day cleanup behavior.
+
+### YouTube API
+- The Queue feature does NOT make any new API calls.
+- It only uses already-fetched video data (snippet, duration, thumbnail) stored from the existing fetch cycle.
+- All player embedding uses the IFrame Player API, which is free and separate from the Data API quota.
+
+### Substack section
+- No changes.
+
+### Settings modal
+- No changes.
+
+### Dark / light mode
+- All new UI elements (queue icon, badge, modal, player section, queue panel, confirmation modals, undo toast) must support both themes consistently with the rest of the dashboard.
+
+### Refresh button
+- The refresh button continues to work as before.
+- It should NOT clear the queue or change its state.
+- Note: when refresh is clicked, archived videos are removed from the dashboard view. Watched-but-not-yet-archived videos in the queue remain accessible (this is the whole point of the two-stage model).
+
+---
+
+## Implementation Approach (Suggested)
+
+Recommend implementing in **two passes** to make testing manageable:
+
+### Pass 1: Queue infrastructure (no player)
+- localStorage data model and helper functions (add, remove, reorder, clear, toggle watched, etc.)
+- Queue icon button on thumbnails (both states)
+- Queue badge in YouTube section header
+- Queue modal
+- Clear All with undo toast (without confirmation modal yet, since nothing is "watched" without the player)
+- Dark mode support for all of the above
+- Test: user can build, view, reorder, and remove queue items. State persists across reloads.
+
+### Pass 2: Player and session logic
+- IFrame Player API integration
+- Player section
+- Queue panel below player (with current-video highlight)
+- Playback tracking and 90% threshold logic
+- Auto-advance
+- Previous / Next / Archive / Close controls
+- Watch Again button on grayed items
+- Session-end and Queue-complete confirmation modals
+- Wire up Clear All to use confirmation modal when watched videos exist
+- Test: full flow including stepping-away scenarios.
+
+---
+
+## Open Items / Future Considerations
+
+These are NOT part of this build but are worth keeping in mind:
+
+- **Watch history feature:** a list of recently-archived videos with the ability to restore them. Would help with the "stepped away from the computer" scenario as a secondary safety net. Not needed for v1 because the two-stage model already addresses the primary concern.
+
+
+---
+
+## File Notes
+
+- A local copy of the file exists on the developer's hard drive as `index.html` file (`C:\Vaults\Vault 1.0\10. Projects\Media Dashboard\Media Dashboard IDE files\index.html`), although we have mostly switched to using the GitHub repo as the main source of truth
+- Backup current version with a food-themed name 
