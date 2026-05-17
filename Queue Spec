@@ -46,6 +46,8 @@ A video in the queue has two possible states:
 
 **Watched videos only become truly archived (removed from dashboard feed and added to the archive system) when the user confirms session end** via the confirmation modal. This protects against the scenario where a user steps away from the computer, videos auto-play, and they want to go back and rewatch missed content.
 
+**Relationship between `watched` and `archived` (clarification — added 2026-05-17):** These are two independent flags. Setting `watched: true` does NOT archive a video, and archiving a video (via the existing thumbnail X) does NOT set `watched`. Neither status ever auto-triggers the other. They converge at exactly one point: session-end, when the user confirms "Archive Videos" — at that moment every `watched: true` video is archived AND removed from the queue together. Player playback eligibility depends only on `watched`/unwatched and never consults archived state. Because the queue stores its own snapshot of each video's data at add-time, a queued video plays identically whether or not it is archived or still present in the dashboard cache.
+
 **UI terminology note:** despite the two-stage backend, the user-facing button on the player says **"Archive"** (not "Mark as Watched") to stay consistent with the existing dashboard vocabulary. The user doesn't need to understand the two-stage flow — to them, archiving just happens, and eventually it does.
 
 ---
@@ -68,6 +70,7 @@ Each YouTube video card gets a new "Queue" icon button, behaving similarly to th
   - Instead of the queue icon, a WHITE NUMBER is displayed showing the video's position in the queue (1, 2, 3...)
   - Click → removes the video from the queue. All other queued videos renumber accordingly.
 - **Position:** Direct child of `.content-card` (same DOM layer as the existing `.archive-btn`), positioned absolute on the right side of the card, **below** the archive button with a small gap between them (e.g. `top: 44px; right: 8px` — the archive button sits at `top: 8px; right: 8px`). The gap is intentional to reduce the chance of accidentally clicking one when meaning to click the other. Do NOT place inside `.thumbnail-container`.
+- **On archived (grayed) cards (decision 2026-05-17):** when a card has been archived via the thumbnail X but the video is still in the queue, the card grays out and its archive X hides — but the queue icon **stays visible and clickable** so the user can still un-queue the video from the grayed card. The queue icon must sit above the card's "Click to restore" overlay/handler and use `event.stopPropagation()` (as the existing archive button does) so a click on it un-queues rather than unarchives.
 - **Dark mode:** both states must support light and dark themes.
 
 ### 2. Queue badge in YouTube section header
@@ -142,6 +145,16 @@ Visible whenever the player is active, regardless of play/pause state. Functions
 - Click X on a queue item in the modal or panel → removes from queue.
 - All views update immediately. Position numbers on remaining items renumber.
 - If queue becomes empty AND player is not active, the Queue badge disappears.
+
+### Archiving a queued video from the thumbnail X (added 2026-05-17)
+
+The thumbnail's archive X and the queue are independent systems. If the user clicks the existing archive X on a video that is currently in the queue:
+
+- The video is archived exactly as it normally would be (removed from the dashboard feed via the existing `archiveItem()` path; subject to the existing 14-day cleanup).
+- **The queue entry is left completely untouched** — still `watched: false`, still in its position, still playable from the queue player.
+- Rationale: the only realistic reason a user archives a still-unwatched queued video from the thumbnail is "tidying up the feed; I still intend to watch it from the queue." Honor that intent.
+- After they watch it from the queue, normal logic applies: it becomes `watched: true`, and at session-end it is removed from the queue and archived. Since it is already archived, the session-end archive call is a harmless no-op (the existing `archiveItem()` already guards against double-archiving).
+- If the user instead wants it gone entirely, they remove it from the queue directly (queue icon, per-item X, or Clear All) — that is pure deletion and does NOT archive or mark watched.
 
 ### Reordering
 - Drag-and-drop in the modal or panel.
@@ -255,6 +268,11 @@ This pattern only applies when there are no watched videos. If watched videos ex
 - The Queue feature uses the existing archive functionality.
 - When confirmation modal's "Archive Videos" is clicked, each watched video is archived using the same code path that the existing X-on-thumbnail archive button uses.
 - Archived videos follow the existing 14-day cleanup behavior.
+- `watched` and `archived` are independent flags (see the Two-Stage Status Model clarification). The existing `archiveItem()` is idempotent — archiving an already-archived video is a no-op — so the session-end archive of a video that was already archived from the thumbnail causes no problems.
+- Archiving a queued video from the thumbnail X does not modify the queue entry (see Behavior & Logic § "Archiving a queued video from the thumbnail X").
+
+### HTML escaping fix (pre-existing bug — to be fixed in Pass 1, added 2026-05-17)
+The existing rendering inserts video/article titles and channel/author names into HTML without escaping (`renderVideos()` ~`index.html:1907`; Substack render ~`index.html:2114`). Titles containing `&`, `"`, `<`, or `>` (e.g. `Tips & Tricks: "5 < 10"`) break card layout and are a latent XSS risk. Pass 1 will route these strings through the existing `escapeAttr()` helper for **both** the YouTube and Substack sections. This is a small, contained change folded into Pass 1; the existing render structure is otherwise unchanged. Decision: fix both sections now rather than leave Substack broken, since it is the identical one-line-style fix.
 
 ### YouTube API
 - The Queue feature does NOT make any new API calls.
@@ -289,6 +307,8 @@ Add to `<head>`:
 
 Initialize on each list when it is rendered (modal and panel each get their own `Sortable` instance). On the `onEnd` callback, re-sync the queue array to match the new DOM order and call `updateQueueIcons()`.
 
+**Online assumption (decision 2026-05-17):** The dashboard's core purpose is watching YouTube, so the user is online by definition. We do NOT build offline-degradation handling around SortableJS — load it from the CDN as above. Keep only a minimal guard so a momentary CDN failure can't throw a hard error (feature-detect `window.Sortable` before initializing and skip drag wiring if it's absent). Nothing more elaborate than that.
+
 ---
 
 ## Implementation Approach (Suggested)
@@ -303,6 +323,8 @@ Recommend implementing in **two passes** to make testing manageable:
 - Queue modal
 - Clear All with undo toast (without confirmation modal yet, since nothing is "watched" without the player)
 - Dark mode support for all of the above
+- Fix the pre-existing HTML-escaping bug in BOTH the YouTube and Substack renderers (route titles/channel/author through `escapeAttr()`) — see Integration § "HTML escaping fix"
+- Bump the footer `version:` string to the new food-themed codename for this build — see File Notes
 - Test: user can build, view, reorder, and remove queue items. State persists across reloads.
 
 ### Pass 2: Player and session logic
@@ -328,7 +350,24 @@ These are NOT part of this build but are worth keeping in mind:
 
 ---
 
+## Decision Log
+
+### Session 2026-05-17 (planning only — no code written)
+
+Decisions made in discussion, now reflected in the body of this spec:
+
+1. **Build scope:** This round implements **Pass 1 only** (queue infrastructure, no player). Pass 2 (IFrame player + session logic) is deferred to a later session.
+2. **HTML escaping bug:** A pre-existing unescaped-title bug was identified in both the YouTube and Substack renderers. It will be fixed as part of Pass 1 using the existing `escapeAttr()` helper. (See Integration § "HTML escaping fix".)
+3. **Online assumption:** The dashboard is inherently online (its purpose is watching YouTube). No offline-degradation handling for SortableJS — CDN load plus a minimal feature-detect guard only. (See Dependencies.)
+4. **Backup / versioning:** Git history is the backup; no separate backup file. The footer `version:` string is still bumped to a new food-themed codename per substantive change so the user can confirm they're not viewing a cached old version. (See File Notes.)
+5. **Archiving a queued video from the thumbnail X:** Archive as normal; leave the queue entry fully untouched (still unwatched, still playable). `watched` and `archived` are independent flags that converge only at session-end; re-archiving at session-end is a harmless no-op. (See Two-Stage Status Model clarification and Behavior & Logic § "Archiving a queued video from the thumbnail X".)
+6. **Queue icon on archived/grayed cards:** Stays visible and clickable so the user can still un-queue from a grayed card. (See UI Components § 1.)
+
+**Open loose end for next session:** confirm the exact new footer codename (and whether to keep the `ver` number scheme). Current footer: `version: bento ver3`.
+
+---
+
 ## File Notes
 
 - A local copy of the file exists on the developer's hard drive as `index.html` file (`C:\Vaults\Vault 1.0\10. Projects\Media Dashboard\Media Dashboard IDE files\index.html`), although we have mostly switched to using the GitHub repo as the main source of truth
-- Backup current version with a food-themed name 
+- **Versioning (updated 2026-05-17):** The old "backup the file with a food-themed name" instruction referred to the pre-GitHub local-dev workflow and is now obsolete — **git history is the backup**; no separate backup file is needed. The footer **`version:`** string IS still used: bump it to a **new food-themed codename** on each substantive change so the user can visually confirm, when viewing the live dashboard, that they're seeing the latest version and not a browser-cached older copy. Footer currently reads `version: bento ver3`. Choose the new codename at implementation time; the `ver` number scheme may be kept or dropped — confirm with the user.
