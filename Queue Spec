@@ -324,7 +324,7 @@ Recommend implementing in **two passes** to make testing manageable:
 - Clear All with undo toast (without confirmation modal yet, since nothing is "watched" without the player)
 - Dark mode support for all of the above
 - Fix the pre-existing HTML-escaping bug in BOTH the YouTube and Substack renderers (route titles/channel/author through `escapeAttr()`) — see Integration § "HTML escaping fix"
-- Bump the footer `version:` string to the new food-themed codename for this build — see File Notes
+- Set the footer `version:` string to `kebab ver1` for the first Pass 1 push (subsequent fix/tweak pushes increment to `kebab ver2`, etc.) — see File Notes § "Versioning"
 - Test: user can build, view, reorder, and remove queue items. State persists across reloads.
 
 ### Pass 2: Player and session logic
@@ -359,15 +359,20 @@ Decisions made in discussion, now reflected in the body of this spec:
 1. **Build scope:** This round implements **Pass 1 only** (queue infrastructure, no player). Pass 2 (IFrame player + session logic) is deferred to a later session.
 2. **HTML escaping bug:** A pre-existing unescaped-title bug was identified in both the YouTube and Substack renderers. It will be fixed as part of Pass 1 using the existing `escapeAttr()` helper. (See Integration § "HTML escaping fix".)
 3. **Online assumption:** The dashboard is inherently online (its purpose is watching YouTube). No offline-degradation handling for SortableJS — CDN load plus a minimal feature-detect guard only. (See Dependencies.)
-4. **Backup / versioning:** Git history is the backup; no separate backup file. The footer `version:` string is still bumped to a new food-themed codename per substantive change so the user can confirm they're not viewing a cached old version. (See File Notes.)
+4. **Backup / versioning:** Git history is the backup; no separate backup file. The footer `version:` follows `<food> ver<N>`: a new food codename per major feature (number reset to `ver1`), incrementing the number for every fix/tweak/incremental push within that same feature. The Queue feature's codename is **`kebab`**; the first live push is `kebab ver1`; Pass 2 stays `kebab` and keeps incrementing. (See File Notes § "Versioning" for the full scheme.)
 5. **Archiving a queued video from the thumbnail X:** Archive as normal; leave the queue entry fully untouched (still unwatched, still playable). `watched` and `archived` are independent flags that converge only at session-end; re-archiving at session-end is a harmless no-op. (See Two-Stage Status Model clarification and Behavior & Logic § "Archiving a queued video from the thumbnail X".)
 6. **Queue icon on archived/grayed cards:** Stays visible and clickable so the user can still un-queue from a grayed card. (See UI Components § 1.)
 
-**Open loose end for next session:** confirm the exact new footer codename (and whether to keep the `ver` number scheme). Current footer: `version: bento ver3`.
+**Open loose ends for next session:** none. Footer scheme confirmed — codename `kebab`, first live push = `kebab ver1` (see File Notes § "Versioning").
 
 ---
 
 ## File Notes
 
 - A local copy of the file exists on the developer's hard drive as `index.html` file (`C:\Vaults\Vault 1.0\10. Projects\Media Dashboard\Media Dashboard IDE files\index.html`), although we have mostly switched to using the GitHub repo as the main source of truth
-- **Versioning (updated 2026-05-17):** The old "backup the file with a food-themed name" instruction referred to the pre-GitHub local-dev workflow and is now obsolete — **git history is the backup**; no separate backup file is needed. The footer **`version:`** string IS still used: bump it to a **new food-themed codename** on each substantive change so the user can visually confirm, when viewing the live dashboard, that they're seeing the latest version and not a browser-cached older copy. Footer currently reads `version: bento ver3`. Choose the new codename at implementation time; the `ver` number scheme may be kept or dropped — confirm with the user.
+- **Versioning (updated 2026-05-17):** The old "backup the file with a food-themed name" instruction referred to the pre-GitHub local-dev workflow and is now obsolete — **git history is the backup**; no separate backup file is needed. The footer **`version:`** string IS still used, so the user can visually confirm when viewing the live dashboard that they're seeing the latest deploy and not a browser-cached older copy. The format is **`<food> ver<N>`**, with this scheme:
+  - The **food codename identifies a major feature.** Each new major feature (or large change) gets a brand-new food name and resets the number to `ver1`.
+  - The **number increments on every subsequent push within that same feature** — bug fixes, minor tweaks, and incremental sub-pieces of the same feature all just bump `verN` (codename stays the same).
+  - The Queue feature's codename is **`kebab`**. The first push of Pass 1 to the live site is **`kebab ver1`**. Any later fix or tweak → `kebab ver2`, etc. **Pass 2 (adding the player) is still part of the Queue feature**, so it stays `kebab` and simply continues incrementing (e.g. `kebab ver3`+, depending on how many fix pushes happen in between).
+  - A future unrelated major feature starts a brand-new food name back at `ver1`.
+  - (The prior footer was `version: bento ver3`; `bento` was the previous feature's codename.)
